@@ -15,7 +15,7 @@ export default async function InboxPage() {
           <h1>Atendimento centralizado.</h1>
           <p className="description">Veja conversas, responda leads e mantenha o histórico conectado ao CRM.</p>
         </div>
-        <span className="badge hot">Evolution API conectada</span>
+        <span className="badge hot">Cloud API preparada</span>
       </div>
       <InboxClient contacts={contacts} messages={messages} />
     </>

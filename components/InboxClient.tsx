@@ -1,15 +1,46 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Contact, Message } from "@/lib/types";
 import { shortDate } from "@/lib/format";
 
-export function InboxClient({ contacts, messages: initialMessages }: { contacts: Contact[]; messages: Message[] }) {
-  const [selectedId, setSelectedId] = useState(contacts[0]?.id);
+export function InboxClient({ contacts: initialContacts, messages: initialMessages }: { contacts: Contact[]; messages: Message[] }) {
+  const [contacts, setContacts] = useState<Contact[]>(initialContacts);
+  const [selectedId, setSelectedId] = useState(initialContacts[0]?.id);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [draft, setDraft] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const router = useRouter();
   const selected = contacts.find((contact) => contact.id === selectedId) || contacts[0];
   const threadMessages = useMemo(() => messages.filter((message) => message.contactId === selected?.id), [messages, selected?.id]);
+
+
+
+  async function deleteConversation(contactId: string) {
+    const contact = contacts.find((item) => item.id === contactId);
+    if (!contact) return;
+
+    const ok = window.confirm(`Excluir a conversa de ${contact.name}? Isso também remove as mensagens e a oportunidade vinculada.`);
+    if (!ok) return;
+
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/contacts/${contactId}`, { method: "DELETE" });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erro ao excluir conversa.");
+
+      const remainingContacts = contacts.filter((item) => item.id !== contactId);
+      setContacts(remainingContacts);
+      setMessages((current) => current.filter((message) => message.contactId !== contactId));
+      setSelectedId((current) => (current === contactId ? remainingContacts[0]?.id : current));
+      router.refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Erro ao excluir conversa.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function sendMessage() {
     const body = draft.trim();
@@ -60,14 +91,16 @@ export function InboxClient({ contacts, messages: initialMessages }: { contacts:
   return (
     <section className="card inbox">
       <aside className="thread-list">
-        <h2>Conversas</h2>
+        <div className="thread-list-head">
+          <h2>Conversas</h2>
+          <span className="muted thread-count">{contacts.length}</span>
+        </div>
         {contacts.map((contact) => (
           <button key={contact.id} className={`thread ${contact.id === selected?.id ? "active" : ""}`} onClick={() => setSelectedId(contact.id)}>
             <span className="avatar">{contact.name.slice(0, 1)}</span>
-            <span style={{ minWidth: 0 }}>
+            <span className="thread-copy">
               <strong>{contact.name}</strong>
-              <br />
-              <span className="muted">{contact.source}</span>
+              <span className="muted">{contact.company || contact.source}</span>
             </span>
           </button>
         ))}
@@ -79,11 +112,16 @@ export function InboxClient({ contacts, messages: initialMessages }: { contacts:
             <h2 style={{ marginBottom: 4 }}>{selected?.name}</h2>
             <span className="muted">{selected?.phone} • {selected?.company || "sem empresa"}</span>
           </div>
-          <span className="badge">{selected?.temperature}</span>
+          <div className="chat-head-actions">
+            <span className="badge">{selected?.temperature}</span>
+            <button className="btn mini secondary" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
+              {deleting ? "Excluindo..." : "Excluir conversa"}
+            </button>
+          </div>
         </header>
 
         <div className="messages">
-          {threadMessages.length === 0 && <p className="muted">Nenhuma mensagem ainda. Envie a primeira mensagem para testar o fluxo.</p>}
+          {threadMessages.length === 0 && <div className="message-empty"><p className="muted">Nenhuma mensagem ainda. Envie a primeira mensagem para testar o fluxo.</p></div>}
           {threadMessages.map((message) => (
             <div key={message.id} className={`message ${message.direction === "outbound" ? "outbound" : ""}`}>
               {message.body}

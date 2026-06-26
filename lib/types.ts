@@ -1,7 +1,7 @@
 export type LeadTemperature = "frio" | "morno" | "quente";
 export type DealStatus = "aberto" | "ganho" | "perdido";
 export type MessageDirection = "inbound" | "outbound";
-export type MessageStatus = "queued" | "sent" | "received" | "delivered" | "read" | "failed" | string;
+export type MessageStatus = "queued" | "sent" | "delivered" | "read" | "failed";
 
 export interface Stage {
   id: string;

@@ -1,27 +1,19 @@
-import { EvolutionSetupPanel } from "@/components/EvolutionSetupPanel";
 import { WhatsAppTestPanel } from "@/components/WhatsAppTestPanel";
-import { getWhatsAppProvider } from "@/lib/whatsapp";
 
 function statusBadge(active: boolean, label: string) {
   return <span className={`status-dot ${active ? "ok" : "warn"}`}>{label}</span>;
 }
 
-function mask(value?: string) {
-  if (!value) return "não configurado";
-  if (value.length <= 12) return "configurado";
-  return `${value.slice(0, 7)}...${value.slice(-5)}`;
-}
-
 export default function ConfigPage() {
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://nextlead-crm.vercel.app").replace(/\/$/, "");
-  const webhookSecret = process.env.WHATSAPP_WEBHOOK_SECRET;
-  const webhookUrl = `${appUrl}/api/whatsapp/webhook${webhookSecret ? `?secret=${encodeURIComponent(webhookSecret)}` : ""}`;
+  const webhookUrl = `${appUrl}/api/whatsapp/webhook`;
   const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
   const hasLeadCors = Boolean(process.env.NEXTLEAD_ALLOWED_ORIGINS);
-  const provider = getWhatsAppProvider();
-  const hasEvolution = Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE);
-  const hasMeta = Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
-  const whatsappReady = provider !== "demo";
+  const hasWhatsAppToken = Boolean(process.env.WHATSAPP_ACCESS_TOKEN);
+  const hasPhoneId = Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID);
+  const hasVerifyToken = Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN);
+  const whatsappReady = hasWhatsAppToken && hasPhoneId;
+  const webhookReady = hasVerifyToken && Boolean(appUrl);
 
   return (
     <>
@@ -29,7 +21,7 @@ export default function ConfigPage() {
         <div>
           <p className="eyebrow">Setup</p>
           <h1>Configuração da integração.</h1>
-          <p className="description">CRM protegido, landing pages conectadas e WhatsApp via Evolution API rodando na Oracle.</p>
+          <p className="description">CRM protegido, landing pages conectadas e WhatsApp Cloud API pronto para ativar.</p>
         </div>
       </div>
 
@@ -46,15 +38,15 @@ export default function ConfigPage() {
         </article>
         <article className="card compact-status">
           <small className="muted">WhatsApp</small>
-          <strong>{provider === "evolution" ? "Evolution API" : provider === "meta" ? "Meta Cloud API" : "Não configurado"}</strong>
-          {statusBadge(whatsappReady, whatsappReady ? "envio ativo" : "pendente")}
+          <strong>Cloud API</strong>
+          {statusBadge(whatsappReady, whatsappReady ? "envio ativo" : "aguardando Meta")}
         </article>
       </section>
 
       <section className="grid cols-2" style={{ marginTop: 18 }}>
         <article className="card">
           <h2>Variáveis do projeto</h2>
-          <p className="description">Estas são as variáveis principais usadas na Vercel. A Evolution API é o provedor ativo neste momento.</p>
+          <p className="description">Estas são as variáveis usadas no CRM, Supabase, login, landing pages e WhatsApp.</p>
           <pre className="code">{`NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
@@ -68,57 +60,55 @@ NEXTLEAD_FELIPE_PASSWORD=
 NEXTLEAD_ALLOWED_ORIGINS=*
 NEXTLEAD_LEADS_API_KEY=
 
-WHATSAPP_PROVIDER=evolution
-EVOLUTION_API_URL=${process.env.EVOLUTION_API_URL || "http://147.15.89.173:8080"}
-EVOLUTION_API_KEY=${mask(process.env.EVOLUTION_API_KEY)}
-EVOLUTION_INSTANCE=${process.env.EVOLUTION_INSTANCE || "nextlead"}
-WHATSAPP_WEBHOOK_SECRET=${webhookSecret ? mask(webhookSecret) : "opcional"}`}</pre>
+META_GRAPH_VERSION=v20.0
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_WABA_ID=
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=`}</pre>
         </article>
 
         <article className="card">
-          <h2>Webhook da Evolution API</h2>
-          <p className="description" style={{ marginBottom: 14 }}>Use esta URL na Evolution para receber mensagens no CRM e salvar histórico no Supabase.</p>
+          <h2>Webhook da Meta</h2>
+          <p className="description" style={{ marginBottom: 14 }}>Use estes dados no painel da Meta para validar o webhook.</p>
           <div className="setup-list">
             <div>
-              <small className="muted">Webhook URL</small>
+              <small className="muted">Callback URL</small>
               <pre className="code inline-code">{webhookUrl}</pre>
             </div>
             <div>
-              <small className="muted">Status das variáveis</small>
-              <div style={{ marginTop: 8 }}>{statusBadge(hasEvolution, hasEvolution ? "Evolution configurada" : "configure Evolution")}</div>
+              <small className="muted">Verify token</small>
+              <pre className="code inline-code">Mesmo valor de WHATSAPP_WEBHOOK_VERIFY_TOKEN</pre>
             </div>
             <div>
-              <small className="muted">Diagnóstico</small>
-              <pre className="code inline-code">{`${appUrl}/api/debug/whatsapp`}</pre>
+              <small className="muted">Status</small>
+              <div style={{ marginTop: 8 }}>{statusBadge(webhookReady, webhookReady ? "pronto para validar" : "configure o verify token")}</div>
             </div>
           </div>
-          <EvolutionSetupPanel />
-          <p className="description" style={{ marginTop: 14 }}>Se o botão não configurar automaticamente, abra o Manager da Evolution, entre na instância <strong>nextlead</strong> e configure o webhook manualmente com a URL acima.</p>
         </article>
       </section>
 
       <section className="card" style={{ marginTop: 18 }}>
-        <h2>Fluxo atual</h2>
+        <h2>Próximo passo: ativar WhatsApp Cloud API</h2>
         <div className="steps-grid">
           <div className="setup-step">
             <span>1</span>
-            <strong>Lead entra</strong>
-            <p>A landing page envia o formulário para /api/leads e cria contato + oportunidade.</p>
+            <strong>Criar app na Meta</strong>
+            <p>Entre no Meta for Developers, crie ou acesse o app e adicione o produto WhatsApp.</p>
           </div>
           <div className="setup-step">
             <span>2</span>
-            <strong>Atendimento pelo Inbox</strong>
-            <p>O CRM envia mensagens pelo endpoint da Evolution API hospedado na Oracle.</p>
+            <strong>Copiar credenciais</strong>
+            <p>Copie access token, phone number ID e WABA ID para as variáveis da Vercel.</p>
           </div>
           <div className="setup-step">
             <span>3</span>
-            <strong>Webhook recebe respostas</strong>
-            <p>Mensagens recebidas no WhatsApp entram no Supabase e aparecem no Inbox.</p>
+            <strong>Validar webhook</strong>
+            <p>Use o Callback URL acima e o verify token que você definiu na Vercel.</p>
           </div>
           <div className="setup-step">
             <span>4</span>
-            <strong>Funil comercial</strong>
-            <p>Novas conversas criam oportunidade automática no estágio Novo lead.</p>
+            <strong>Assinar eventos</strong>
+            <p>No webhook da Meta, assine o campo messages para receber mensagens e status.</p>
           </div>
         </div>
       </section>
@@ -126,17 +116,15 @@ WHATSAPP_WEBHOOK_SECRET=${webhookSecret ? mask(webhookSecret) : "opcional"}`}</p
       <section className="grid cols-2" style={{ marginTop: 18 }}>
         <article className="card">
           <h2>Teste de envio pelo WhatsApp</h2>
-          <p className="description">Com a instância <strong>nextlead</strong> conectada, envie uma mensagem real por aqui usando DDI + DDD + número.</p>
+          <p className="description">Depois de configurar as credenciais da Meta, envie uma mensagem de teste por aqui. Sem credenciais, ela fica salva no CRM em modo demo.</p>
           <WhatsAppTestPanel defaultMessage="Olá! Aqui é a NextLead. Recebemos seu contato e vamos te ajudar com sua landing page." />
         </article>
 
         <article className="card">
-          <h2>Rotas úteis</h2>
-          <p className="description">Use estas rotas para diagnóstico rápido depois de cada deploy.</p>
-          <pre className="code">{`${appUrl}/api/debug/whatsapp
-${appUrl}/api/whatsapp/evolution/status
-${appUrl}/api/whatsapp/webhook`}</pre>
-          <p className="description" style={{ marginTop: 14 }}>O webhook precisa estar apontado na Evolution API para as respostas aparecerem no Inbox.</p>
+          <h2>Diagnóstico rápido</h2>
+          <p className="description">Após o deploy, abra esta rota logado para conferir se a Vercel reconheceu as variáveis do WhatsApp.</p>
+          <pre className="code">{`${appUrl}/api/debug/whatsapp`}</pre>
+          <p className="description" style={{ marginTop: 14 }}>O envio real precisa de access token e phone number ID. O recebimento real precisa do webhook validado na Meta.</p>
         </article>
       </section>
 
