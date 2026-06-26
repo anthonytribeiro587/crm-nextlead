@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { onlyDigits } from "@/lib/format";
+import { normalizeBrazilWhatsAppPhone } from "@/lib/format";
 import { getWhatsAppProvider, sendWhatsAppText } from "@/lib/whatsapp";
 
 async function saveOutboundMessage(input: {
@@ -52,7 +52,7 @@ async function saveOutboundMessage(input: {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const to = onlyDigits(body.to || "");
+  const to = normalizeBrazilWhatsAppPhone(body.to || "");
   const message = String(body.message || "").trim();
   const contactId = body.contactId;
   const provider = getWhatsAppProvider();

@@ -5,8 +5,11 @@ function onlyDigits(value: unknown) {
 }
 
 function normalizePhone(value: unknown) {
-  const digits = onlyDigits(value);
+  let digits = onlyDigits(value);
   if (!digits) return "";
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
   return digits;
 }
 
@@ -109,6 +112,29 @@ async function upsertContactSafe(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   input: { phone: string; name: string; createdAt: string },
 ) {
+  const { data: existing } = await supabase
+    .from("contacts")
+    .select("id,name,company")
+    .eq("phone", input.phone)
+    .limit(1)
+    .maybeSingle();
+
+  // Se o contato já veio da landing, preserva nome/empresa e só atualiza o último contato.
+  if (existing?.id) {
+    const result = await supabase
+      .from("contacts")
+      .update({
+        last_message_at: input.createdAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id)
+      .select("id,name")
+      .single();
+
+    if (!result.error && result.data?.id) return result;
+    return { data: { id: existing.id, name: existing.name }, error: null } as any;
+  }
+
   const fullPayload = {
     phone: input.phone,
     name: input.name || input.phone,
@@ -119,7 +145,7 @@ async function upsertContactSafe(
     updated_at: new Date().toISOString(),
   };
 
-  let result = await supabase.from("contacts").upsert(fullPayload, { onConflict: "phone" }).select("id,name").single();
+  let result = await supabase.from("contacts").insert(fullPayload).select("id,name").single();
 
   if (!result.error && result.data?.id) return result;
 
@@ -192,6 +218,14 @@ export async function persistEvolutionWebhook(payload: any) {
     }
 
     const fromMe = Boolean(key?.fromMe || item?.fromMe);
+
+    // Mensagens enviadas pelo próprio CRM já são salvas em /api/whatsapp/send.
+    // Ignorar ecos fromMe evita criar contatos duplicados como "Você" para o mesmo número.
+    if (fromMe) {
+      skipped += 1;
+      continue;
+    }
+
     const pushName = item?.pushName || item?.verifiedBizName || item?.notifyName || phone;
     const messageType = item?.messageType || item?.type || Object.keys(item?.message || {})[0] || "text";
     const body = extractText(item, messageType);

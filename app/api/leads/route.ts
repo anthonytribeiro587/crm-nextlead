@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { onlyDigits } from "@/lib/format";
+import { normalizeBrazilWhatsAppPhone } from "@/lib/format";
 import { ensureDefaultPipeline } from "@/lib/default-pipeline";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth-server";
 
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
 
   const payload = await request.json().catch(() => ({}));
   const name = text(payload.name);
-  const phone = onlyDigits(payload.phone || "");
+  const phone = normalizeBrazilWhatsAppPhone(payload.phone || "");
   const source = text(payload.source, "Landing Page");
   const interest = text(payload.interest, "Novo orçamento");
   const company = text(payload.company || payload.business || "");
