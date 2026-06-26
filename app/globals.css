@@ -1333,3 +1333,202 @@ button:disabled {
   .compact-grid { grid-template-columns: 1fr; }
   .deal-edit-actions { align-self: auto; }
 }
+
+/* NextLead CRM - inbox visual calm v3 */
+.chat-head-clean {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(420px, auto);
+  align-items: start;
+  gap: 18px;
+  padding: 18px 22px 14px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, .30), rgba(15, 23, 42, .12));
+}
+.contact-summary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.contact-summary h2 {
+  margin: 0;
+  font-size: 1.12rem;
+  letter-spacing: -.03em;
+}
+.eyebrow-small {
+  color: rgba(42, 213, 255, .86);
+  font-size: .62rem;
+  font-weight: 950;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.lead-action-panel {
+  max-width: 760px;
+  padding: 0;
+}
+.lead-action-controls {
+  display: grid;
+  grid-template-columns: minmax(142px, .7fr) minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, .12);
+  border-radius: 16px;
+  background: rgba(6, 13, 28, .32);
+}
+.action-field {
+  min-width: 0;
+  gap: 5px;
+}
+.action-field span {
+  font-size: .58rem;
+  letter-spacing: .11em;
+  opacity: .82;
+}
+.mini-select {
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .64);
+  border-color: rgba(148, 163, 184, .16);
+  font-size: .78rem;
+}
+.lead-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.danger-soft {
+  border-color: rgba(248, 113, 113, .18) !important;
+  color: #fecaca !important;
+  background: rgba(127, 29, 29, .12) !important;
+}
+.stage-feedback {
+  width: 100%;
+  display: block;
+  text-align: right;
+  margin-top: 4px;
+  font-size: .78rem;
+  color: #8be9ff;
+}
+.conversation-tools {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(126px, max-content));
+  align-items: start;
+  gap: 8px;
+  padding: 10px 22px;
+  background: rgba(255,255,255,.010);
+}
+.tool-panel {
+  position: static;
+  min-width: 0;
+}
+.tool-panel > summary {
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .46);
+  border-color: rgba(148, 163, 184, .14);
+  font-size: .72rem;
+  white-space: nowrap;
+}
+.tool-panel[open] {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(42, 213, 255, .14);
+  border-radius: 16px;
+  background: rgba(5, 11, 24, .30);
+}
+.tool-panel[open] > summary {
+  justify-content: center;
+  width: 100%;
+}
+.tool-panel-body {
+  position: static;
+  z-index: auto;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.quick-reply {
+  padding: 6px 10px;
+  font-size: .72rem;
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+.assistant-note {
+  margin: 8px 0 0;
+  max-width: 100%;
+}
+.messages-scroll {
+  padding: 18px 22px;
+  gap: 9px;
+}
+.message {
+  max-width: min(560px, 68%);
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: .88rem;
+  line-height: 1.36;
+}
+.message.outbound {
+  max-width: min(620px, 64%);
+}
+.message small {
+  font-size: .72rem;
+}
+.composer {
+  padding: 13px 20px;
+  gap: 10px;
+  background: rgba(5, 11, 24, .24);
+}
+.composer-input {
+  min-height: 52px;
+  max-height: 170px;
+  font-size: .9rem;
+  line-height: 1.42;
+  padding: 12px 14px;
+}
+.deal-edit-panel {
+  padding: 12px 22px;
+  background: rgba(15, 23, 42, .18);
+}
+.compact-grid .input {
+  min-height: 38px;
+  font-size: .86rem;
+}
+
+@media (max-width: 1400px) {
+  .chat-head-clean {
+    grid-template-columns: 1fr;
+  }
+  .lead-action-panel,
+  .lead-action-controls {
+    width: 100%;
+    max-width: none;
+  }
+  .stage-feedback { text-align: left; }
+}
+@media (max-width: 900px) {
+  .lead-action-controls,
+  .tool-panel[open] {
+    grid-template-columns: 1fr;
+  }
+  .lead-action-buttons {
+    justify-content: flex-start;
+  }
+  .conversation-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tool-panel[open] { grid-column: 1 / -1; }
+  .tool-panel > summary { width: 100%; justify-content: center; }
+  .message,
+  .message.outbound { max-width: 86%; }
+}

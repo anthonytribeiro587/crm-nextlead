@@ -491,12 +491,13 @@ export function InboxClient({
       </aside>
 
       <div className="chat chat-fixed">
-        <header className="chat-head">
-          <div>
-            <h2 style={{ marginBottom: 4 }}>{selected?.name}</h2>
+        <header className="chat-head chat-head-clean">
+          <div className="contact-summary">
+            <span className="eyebrow-small">Contato em atendimento</span>
+            <h2>{selected?.name}</h2>
             <span className="muted">{selected?.phone} • {selected?.company || "sem empresa"}</span>
           </div>
-          <div className="chat-head-actions">
+          <div className="chat-head-actions lead-action-panel">
             <div className="lead-action-controls">
               <label className="action-field">
                 <span>Temperatura</span>
@@ -528,10 +529,12 @@ export function InboxClient({
                 </select>
               </label>
 
-              <button className="btn mini secondary" onClick={openDealEditor} disabled={!selectedDeal}>Editar oportunidade</button>
-              <button className="btn mini secondary" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
-                {deleting ? "Excluindo..." : "Excluir conversa"}
-              </button>
+              <div className="lead-action-buttons">
+                <button className="btn mini secondary" onClick={openDealEditor} disabled={!selectedDeal}>Editar oportunidade</button>
+                <button className="btn mini secondary danger-soft" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
+                  {deleting ? "Excluindo..." : "Excluir conversa"}
+                </button>
+              </div>
             </div>
             {actionMessage && <span className="stage-feedback">{actionMessage}</span>}
           </div>
@@ -539,7 +542,7 @@ export function InboxClient({
 
         <div className="conversation-tools" aria-label="Ferramentas da conversa">
           <details className="tool-panel">
-            <summary>Respostas rápidas</summary>
+            <summary><span>Respostas rápidas</span></summary>
             <div className="tool-panel-body quick-replies-inline">
               {quickReplies.map((reply) => (
                 <button key={reply.label} type="button" className="quick-reply" onClick={() => setDraft(reply.text)}>
@@ -550,7 +553,7 @@ export function InboxClient({
           </details>
 
           <details className="tool-panel">
-            <summary>Follow-up</summary>
+            <summary><span>Follow-up</span></summary>
             <div className="tool-panel-body followup-inline">
               <input className="input input-compact" type="datetime-local" value={followUpAt} onChange={(event) => setFollowUpAt(event.target.value)} />
               <button className="btn mini secondary" onClick={() => scheduleFollowUp(followUpAt)} disabled={!selected || schedulingFollowUp}>
@@ -560,7 +563,7 @@ export function InboxClient({
           </details>
 
           <details className="tool-panel">
-            <summary>Proposta</summary>
+            <summary><span>Proposta</span></summary>
             <div className="tool-panel-body">
               <button className="btn mini secondary" onClick={generateProposalDraft} disabled={!selected}>Gerar texto de proposta</button>
               <p className="muted tool-hint">Gera um rascunho no campo de mensagem, sem enviar automaticamente.</p>
@@ -568,7 +571,7 @@ export function InboxClient({
           </details>
 
           <details className="tool-panel">
-            <summary>Assistente IA</summary>
+            <summary><span>Assistente IA</span></summary>
             <div className="tool-panel-body quick-replies-inline">
               <button className="quick-reply" onClick={summarizeConversation}>Resumo</button>
               <button className="quick-reply" onClick={suggestNextReply}>Sugerir resposta</button>
@@ -577,7 +580,7 @@ export function InboxClient({
           </details>
 
           <details className="tool-panel">
-            <summary>Histórico</summary>
+            <summary><span>Histórico</span></summary>
             <div className="tool-panel-body timeline-list">
               {commercialHistory.length === 0 ? (
                 <p className="muted tool-hint">Nenhum histórico ainda.</p>
