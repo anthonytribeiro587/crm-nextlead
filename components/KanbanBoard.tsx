@@ -134,6 +134,7 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
             <section
               key={stage.id}
               className={`stage ${draggingId ? "stage-drop-ready" : ""}`}
+              style={{ "--stage-color": stage.color } as React.CSSProperties}
               onDragOver={(event) => event.preventDefault()}
               onDrop={() => {
                 if (draggingId) moveDeal(draggingId, stage.id);

@@ -190,9 +190,9 @@ export function InboxClient({
             <button className="btn mini secondary" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
               {deleting ? "Excluindo..." : "Excluir conversa"}
             </button>
+            {actionMessage && <span className="stage-feedback">{actionMessage}</span>}
           </div>
         </header>
-        {actionMessage && <div className="inline-alert inbox-action-alert">{actionMessage}</div>}
 
         <div className="messages">
           {threadMessages.length === 0 && (
