@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
+import { ActivityList } from "@/components/ActivityList";
 import { LeadCaptureForm } from "@/components/LeadCaptureForm";
 import { MetricCard } from "@/components/MetricCard";
 import { getCrmData } from "@/lib/data";
@@ -64,24 +65,14 @@ export default async function DashboardPage() {
       <section className="grid cols-2">
         <LeadCaptureForm />
         <article className="card">
-          <h2>Próximas ações</h2>
-          {activities.length === 0 ? (
-            <div className="empty-state">
-              <strong>Nenhuma tarefa ainda.</strong>
-              <p className="muted">Quando um lead entrar, o sistema cria uma tarefa de primeiro contato automaticamente.</p>
+          <div className="section-headline">
+            <div>
+              <h2>Próximas ações</h2>
+              <p className="muted">Conclua tarefas sem sair do dashboard.</p>
             </div>
-          ) : activities.map((activity) => {
-            const contact = contacts.find((item) => item.id === activity.contactId);
-            return (
-              <div key={activity.id} className="deal-card">
-                <div>
-                  <strong>{activity.title}</strong>
-                  <p className="muted" style={{ margin: "5px 0 0" }}>{contact?.name || "Lead"} • {new Date(activity.dueAt).toLocaleString("pt-BR")}</p>
-                </div>
-                <span className={`badge ${activity.done ? "cold" : "warm"}`}>{activity.done ? "concluída" : "pendente"}</span>
-              </div>
-            );
-          })}
+            <Link className="btn mini secondary" href="/inbox">Abrir Inbox</Link>
+          </div>
+          <ActivityList activities={activities} contacts={contacts} />
         </article>
       </section>
     </>

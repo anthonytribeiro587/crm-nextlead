@@ -75,6 +75,33 @@ export function InboxClient({
     }
   }
 
+
+  async function scheduleFollowUp(hours = 24) {
+    if (!selected) return;
+
+    const dueAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    setActionMessage(null);
+
+    try {
+      const response = await fetch("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: selected.id,
+          title: "Fazer follow-up",
+          dueAt,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erro ao agendar follow-up.");
+
+      setActionMessage(`Follow-up agendado para ${new Date(dueAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`);
+      router.refresh();
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Erro ao agendar follow-up.");
+    }
+  }
+
   async function deleteConversation(contactId: string) {
     const contact = contacts.find((item) => item.id === contactId);
     if (!contact) return;
@@ -187,6 +214,9 @@ export function InboxClient({
                 </button>
               ))}
             </div>
+            <button className="btn mini secondary" onClick={() => scheduleFollowUp(24)} disabled={!selected}>
+              Follow-up amanhã
+            </button>
             <button className="btn mini secondary" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
               {deleting ? "Excluindo..." : "Excluir conversa"}
             </button>

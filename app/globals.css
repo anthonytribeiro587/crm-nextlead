@@ -971,3 +971,39 @@ button:disabled {
   .stage-feedback { text-align: left; }
   .lead-stage-actions { justify-content: flex-start; }
 }
+
+/* NextLead follow-up batch */
+.section-headline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.activity-list {
+  display: grid;
+  gap: 10px;
+}
+.activity-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, .13);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(5, 11, 24, .48);
+}
+.activity-card.done {
+  opacity: .62;
+  background: rgba(5, 11, 24, .24);
+}
+.activity-card.done strong {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: rgba(148, 163, 184, .55);
+}
+@media (max-width: 760px) {
+  .section-headline,
+  .activity-card { align-items: flex-start; flex-direction: column; }
+}

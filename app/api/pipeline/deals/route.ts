@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { completeInitialContactActivities } from "@/lib/activities";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -44,10 +45,19 @@ export async function PATCH(request: NextRequest) {
   const expectedClose = cleanDate(payload.expectedClose ?? payload.expectedCloseDate ?? payload.expected_close);
   if (expectedClose !== undefined) update.expected_close = expectedClose;
 
-  const { error } = await supabase.from("deals").update(update).eq("id", dealId);
+  const { data: deal, error } = await supabase
+    .from("deals")
+    .update(update)
+    .eq("id", dealId)
+    .select("id,contact_id")
+    .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (stageId && deal?.contact_id) {
+    await completeInitialContactActivities(supabase, deal.contact_id);
   }
 
   return NextResponse.json({ ok: true });

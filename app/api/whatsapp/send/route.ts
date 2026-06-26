@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { brazilPhoneVariants, normalizeBrazilWhatsAppPhone } from "@/lib/format";
 import { getWhatsAppProvider, sendWhatsAppText } from "@/lib/whatsapp";
+import { completeInitialContactActivities } from "@/lib/activities";
 
 async function saveOutboundMessage(input: {
   to: string;
@@ -72,6 +73,10 @@ async function saveOutboundMessage(input: {
   }
 
   await supabase.from("contacts").update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", resolvedContactId);
+
+  if (input.status !== "failed") {
+    await completeInitialContactActivities(supabase, resolvedContactId);
+  }
 
   return resolvedContactId;
 }

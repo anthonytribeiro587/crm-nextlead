@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { brazilPhoneVariants, normalizeBrazilWhatsAppPhone } from "@/lib/format";
 import { ensureDefaultPipeline } from "@/lib/default-pipeline";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth-server";
+import { upsertInitialContactActivity } from "@/lib/activities";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -248,11 +249,7 @@ export async function POST(request: NextRequest) {
     dealId = deal.id;
   }
 
-  await supabase.from("activities").insert({
-    contact_id: contact.id,
-    title: temperature === "quente" ? "Abordar lead quente agora" : "Fazer primeiro contato",
-    due_at: new Date(Date.now() + 1000 * 60 * 60 * (temperature === "quente" ? 1 : 2)).toISOString(),
-  });
+  await upsertInitialContactActivity({ supabase, contactId: contact.id, temperature });
 
   return json(request, { ok: true, contactId: contact.id, dealId });
 }
