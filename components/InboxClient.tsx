@@ -1,0 +1,103 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import type { Contact, Message } from "@/lib/types";
+import { shortDate } from "@/lib/format";
+
+export function InboxClient({ contacts, messages: initialMessages }: { contacts: Contact[]; messages: Message[] }) {
+  const [selectedId, setSelectedId] = useState(contacts[0]?.id);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [draft, setDraft] = useState("");
+  const selected = contacts.find((contact) => contact.id === selectedId) || contacts[0];
+  const threadMessages = useMemo(() => messages.filter((message) => message.contactId === selected?.id), [messages, selected?.id]);
+
+  async function sendMessage() {
+    const body = draft.trim();
+    if (!body || !selected) return;
+
+    const optimistic: Message = {
+      id: `local-${Date.now()}`,
+      contactId: selected.id,
+      direction: "outbound",
+      body,
+      status: "queued",
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((current) => [...current, optimistic]);
+    setDraft("");
+
+    try {
+      const response = await fetch("/api/whatsapp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: selected.phone, contactId: selected.id, message: body }),
+      });
+      const result = await response.json();
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === optimistic.id
+            ? { ...message, status: response.ok ? "sent" : "failed", providerMessageId: result.providerMessageId }
+            : message
+        )
+      );
+    } catch {
+      setMessages((current) => current.map((message) => (message.id === optimistic.id ? { ...message, status: "failed" } : message)));
+    }
+  }
+
+  if (contacts.length === 0) {
+    return (
+      <section className="card inbox empty-inbox">
+        <div className="empty-state">
+          <strong>Nenhuma conversa ainda.</strong>
+          <p className="muted">Crie um lead no Dashboard para ele aparecer aqui. Depois, conecte a Meta para receber mensagens reais.</p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="card inbox">
+      <aside className="thread-list">
+        <h2>Conversas</h2>
+        {contacts.map((contact) => (
+          <button key={contact.id} className={`thread ${contact.id === selected?.id ? "active" : ""}`} onClick={() => setSelectedId(contact.id)}>
+            <span className="avatar">{contact.name.slice(0, 1)}</span>
+            <span style={{ minWidth: 0 }}>
+              <strong>{contact.name}</strong>
+              <br />
+              <span className="muted">{contact.source}</span>
+            </span>
+          </button>
+        ))}
+      </aside>
+
+      <div className="chat">
+        <header className="chat-head">
+          <div>
+            <h2 style={{ marginBottom: 4 }}>{selected?.name}</h2>
+            <span className="muted">{selected?.phone} • {selected?.company || "sem empresa"}</span>
+          </div>
+          <span className="badge">{selected?.temperature}</span>
+        </header>
+
+        <div className="messages">
+          {threadMessages.length === 0 && <p className="muted">Nenhuma mensagem ainda. Envie a primeira mensagem para testar o fluxo.</p>}
+          {threadMessages.map((message) => (
+            <div key={message.id} className={`message ${message.direction === "outbound" ? "outbound" : ""}`}>
+              {message.body}
+              <br />
+              <small style={{ opacity: .72 }}>{shortDate(message.createdAt)} • {message.status}</small>
+            </div>
+          ))}
+        </div>
+
+        <footer className="composer">
+          <input className="input" placeholder="Digite uma mensagem..." value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") sendMessage(); }} />
+          <button className="btn" onClick={sendMessage}>Enviar</button>
+        </footer>
+      </div>
+    </section>
+  );
+}

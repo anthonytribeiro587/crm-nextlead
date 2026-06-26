@@ -1,0 +1,40 @@
+<form id="lead-form">
+  <input name="name" placeholder="Seu nome" required />
+  <input name="phone" placeholder="WhatsApp" required />
+  <input name="company" placeholder="Empresa / negócio" />
+  <textarea name="notes" placeholder="Conte o que você precisa"></textarea>
+  <button type="submit">Solicitar orçamento</button>
+</form>
+
+<script>
+  const form = document.querySelector("#lead-form");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+
+    const payload = {
+      name: formData.get("name"),
+      phone: formData.get("phone"),
+      company: formData.get("company"),
+      source: "Landing Page Cliente",
+      interest: "Orçamento de Landing Page",
+      value: 1200,
+      temperature: "quente",
+      owner: "Anthony",
+      tags: "site, orçamento",
+      notes: formData.get("notes"),
+    };
+
+    const response = await fetch("https://nextlead-crm.vercel.app/api/leads", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload),
+    });
+
+    alert(response.ok ? "Recebemos seu contato!" : "Erro ao enviar. Tente pelo WhatsApp.");
+    if (response.ok) form.reset();
+  });
+</script>
