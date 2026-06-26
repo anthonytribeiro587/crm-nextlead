@@ -1,37 +1,76 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Contact, Deal, LeadTemperature, Message, Stage } from "@/lib/types";
-import { shortDate } from "@/lib/format";
+import type { Activity, Contact, Deal, LeadTemperature, Message, Stage } from "@/lib/types";
+import { money, shortDate } from "@/lib/format";
+
+function formatDateTimeLocal(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function tomorrowBusinessTime() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(9, 0, 0, 0);
+  return formatDateTimeLocal(date);
+}
+
+function messageStatusLabel(status: string) {
+  const map: Record<string, string> = {
+    queued: "enviando",
+    sent: "enviado",
+    received: "recebido",
+    delivered: "entregue",
+    read: "lido",
+    failed: "falhou",
+  };
+  return map[status] || status;
+}
+
+function firstName(name?: string) {
+  const clean = String(name || "").trim();
+  return clean ? clean.split(" ")[0] : "tudo bem";
+}
 
 export function InboxClient({
   contacts: initialContacts,
   messages: initialMessages,
   deals: initialDeals,
   stages,
+  activities: initialActivities,
   initialSelectedId,
 }: {
   contacts: Contact[];
   messages: Message[];
   deals: Deal[];
   stages: Stage[];
+  activities: Activity[];
   initialSelectedId?: string;
 }) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
   const [selectedId, setSelectedId] = useState(initialContacts.find((contact) => contact.id === initialSelectedId)?.id || initialContacts[0]?.id);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
+  const [activities, setActivities] = useState<Activity[]>(initialActivities);
   const [draft, setDraft] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [assistantNote, setAssistantNote] = useState<string | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
   const [updatingLead, setUpdatingLead] = useState(false);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editingDeal, setEditingDeal] = useState(false);
+  const [savingDeal, setSavingDeal] = useState(false);
+  const [followUpAt, setFollowUpAt] = useState(tomorrowBusinessTime);
+  const [dealForm, setDealForm] = useState({ title: "", value: "", expectedClose: "" });
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
   const selected = contacts.find((contact) => contact.id === selectedId) || contacts[0];
   const selectedDeal = useMemo(() => deals.find((deal) => deal.contactId === selected?.id), [deals, selected?.id]);
+  const selectedStage = useMemo(() => stages.find((stage) => stage.id === selectedDeal?.stageId), [stages, selectedDeal?.stageId]);
   const selectedDealStatus = selectedDeal?.status === "perdido" ? "perdido" : selectedDeal?.stageId || "";
   const targetStages = useMemo(() => {
     const wanted = ["Contato feito", "Diagnóstico", "Proposta enviada", "Negociação", "Fechado"];
@@ -39,10 +78,15 @@ export function InboxClient({
       .map((title) => stages.find((stage) => stage.title.toLowerCase() === title.toLowerCase()))
       .filter(Boolean) as Stage[];
   }, [stages]);
-  const threadMessages = useMemo(() => messages.filter((message) => message.contactId === selected?.id), [messages, selected?.id]);
+  const threadMessages = useMemo(() => {
+    return messages
+      .filter((message) => message.contactId === selected?.id)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [messages, selected?.id]);
+  const contactActivities = useMemo(() => activities.filter((activity) => activity.contactId === selected?.id), [activities, selected?.id]);
 
   const quickReplies = useMemo(() => {
-    const name = selected?.name?.split(" ")[0] || "tudo bem";
+    const name = firstName(selected?.name);
     return [
       {
         label: "Abordagem",
@@ -58,6 +102,53 @@ export function InboxClient({
       },
     ];
   }, [selected?.name]);
+
+  const commercialHistory = useMemo(() => {
+    const items: Array<{ id: string; date: string; title: string; detail: string; tone?: string }> = [];
+
+    if (selectedDeal) {
+      items.push({
+        id: `deal-${selectedDeal.id}`,
+        date: selectedDeal.createdAt,
+        title: selectedDeal.status === "perdido" ? "Oportunidade perdida" : selectedDeal.status === "ganho" ? "Oportunidade ganha" : `Etapa: ${selectedStage?.title || "Funil"}`,
+        detail: `${selectedDeal.title} • ${money(selectedDeal.value)}`,
+        tone: selectedDeal.status === "perdido" ? "danger" : selectedDeal.status === "ganho" ? "success" : "info",
+      });
+    }
+
+    threadMessages.slice(-6).forEach((message) => {
+      items.push({
+        id: `message-${message.id}`,
+        date: message.createdAt,
+        title: message.direction === "outbound" ? "Mensagem enviada" : "Mensagem recebida",
+        detail: message.body,
+        tone: message.direction === "outbound" ? "info" : "neutral",
+      });
+    });
+
+    contactActivities.slice(-6).forEach((activity) => {
+      items.push({
+        id: `activity-${activity.id}`,
+        date: activity.dueAt,
+        title: activity.done ? "Tarefa concluída" : "Tarefa pendente",
+        detail: activity.title,
+        tone: activity.done ? "success" : "warning",
+      });
+    });
+
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10);
+  }, [contactActivities, selectedDeal, selectedStage?.title, threadMessages]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [selectedId, threadMessages.length]);
+
+  useEffect(() => {
+    setEditingDeal(false);
+    setAssistantNote(null);
+    setActionMessage(null);
+    setFollowUpAt(tomorrowBusinessTime());
+  }, [selected?.id]);
 
   async function moveSelectedDeal(stage: Stage) {
     if (!selected || !selectedDeal) {
@@ -105,7 +196,7 @@ export function InboxClient({
       return;
     }
 
-    const lostReason = window.prompt("Motivo da perda?", "Sem retorno do cliente");
+    const lostReason = window.prompt("Motivo da perda?", selectedDeal.lostReason || "Sem retorno do cliente");
     if (lostReason === null) return;
 
     setMoving("perdido");
@@ -133,7 +224,6 @@ export function InboxClient({
       setMoving(null);
     }
   }
-
 
   function handleStageChange(value: string) {
     if (!value) return;
@@ -170,10 +260,15 @@ export function InboxClient({
     }
   }
 
-  async function scheduleFollowUp(hours = 24) {
+  async function scheduleFollowUp(dueAtInput?: string) {
     if (!selected || schedulingFollowUp) return;
 
-    const dueAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    const dueAt = dueAtInput ? new Date(dueAtInput).toISOString() : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    if (Number.isNaN(new Date(dueAt).getTime())) {
+      setActionMessage("Data de follow-up inválida.");
+      return;
+    }
+
     setSchedulingFollowUp(true);
     setActionMessage(null);
 
@@ -190,9 +285,22 @@ export function InboxClient({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Erro ao agendar follow-up.");
 
+      if (result.activity) {
+        setActivities((current) => [
+          ...current,
+          {
+            id: result.activity.id,
+            contactId: result.activity.contact_id || selected.id,
+            title: result.activity.title || "Fazer follow-up",
+            dueAt: result.activity.due_at || dueAt,
+            done: Boolean(result.activity.done),
+          },
+        ]);
+      }
+
       setActionMessage(
         result.duplicate
-          ? "Já existe um follow-up pendente para este lead."
+          ? "Já existe um follow-up pendente para este lead neste dia."
           : `Follow-up agendado para ${new Date(dueAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`,
       );
       router.refresh();
@@ -201,6 +309,93 @@ export function InboxClient({
     } finally {
       setSchedulingFollowUp(false);
     }
+  }
+
+  function openDealEditor() {
+    if (!selectedDeal) return;
+    setDealForm({
+      title: selectedDeal.title || "",
+      value: String(selectedDeal.value || 0),
+      expectedClose: selectedDeal.expectedClose || "",
+    });
+    setEditingDeal(true);
+    setActionMessage(null);
+  }
+
+  async function saveDeal() {
+    if (!selectedDeal) return;
+    setSavingDeal(true);
+    setActionMessage(null);
+
+    try {
+      const response = await fetch("/api/pipeline/deals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealId: selectedDeal.id,
+          title: dealForm.title,
+          value: dealForm.value,
+          expectedClose: dealForm.expectedClose || null,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erro ao salvar oportunidade.");
+
+      setDeals((current) =>
+        current.map((deal) =>
+          deal.id === selectedDeal.id
+            ? {
+                ...deal,
+                title: dealForm.title || deal.title,
+                value: Number(String(dealForm.value).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, "")) || 0,
+                expectedClose: dealForm.expectedClose || undefined,
+              }
+            : deal,
+        ),
+      );
+      setEditingDeal(false);
+      setActionMessage("Oportunidade atualizada.");
+      router.refresh();
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Erro ao salvar oportunidade.");
+    } finally {
+      setSavingDeal(false);
+    }
+  }
+
+  function generateProposalDraft() {
+    if (!selected) return;
+    const name = firstName(selected.name);
+    const dealTitle = selectedDeal?.title || "solução digital";
+    const valueText = selectedDeal?.value ? money(selectedDeal.value) : "valor a definir";
+    const deadlineText = selectedDeal?.expectedClose ? `com previsão para ${new Date(selectedDeal.expectedClose).toLocaleDateString("pt-BR")}` : "com prazo alinhado após confirmação";
+
+    const text = `Perfeito, ${name}. Com base no que conversamos, minha sugestão é avançarmos com ${dealTitle}.\n\nA ideia é entregar uma estrutura profissional para captar contatos pelo WhatsApp, organizar os leads no CRM e acompanhar cada oportunidade pelo funil comercial.\n\nInvestimento estimado: ${valueText}.\nEntrega: ${deadlineText}.\n\nSe fizer sentido para você, posso te mandar o próximo passo para começarmos.`;
+    setDraft(text);
+    setActionMessage("Proposta gerada no campo de mensagem. Revise antes de enviar.");
+  }
+
+  function summarizeConversation() {
+    const inbound = threadMessages.filter((message) => message.direction === "inbound");
+    const outbound = threadMessages.filter((message) => message.direction === "outbound");
+    const lastInbound = inbound[inbound.length - 1]?.body;
+    const status = selectedDeal?.status === "perdido" ? "perdida" : selectedDeal?.status === "ganho" ? "ganha" : selectedStage?.title || "sem etapa definida";
+
+    setAssistantNote(
+      `Resumo: ${selected?.name || "Lead"} está em ${status}. A conversa tem ${inbound.length} mensagem(ns) recebida(s) e ${outbound.length} enviada(s). ${lastInbound ? `Último retorno do cliente: “${lastInbound.slice(0, 150)}”.` : "Ainda não há retorno do cliente registrado."}`,
+    );
+  }
+
+  function suggestNextReply() {
+    const name = firstName(selected?.name);
+    const lastInbound = threadMessages.filter((message) => message.direction === "inbound").at(-1)?.body || "";
+    const text = lastInbound.includes("[áudio]")
+      ? `Boa, ${name}. Recebi teu áudio. Vou analisar aqui e já te retorno com o melhor caminho para organizar isso em uma solução simples e prática.`
+      : selectedDeal?.status === "perdido"
+        ? `Oi ${name}, tudo bem? Passando só para deixar a porta aberta caso você queira retomar a ideia mais para frente. Posso te mandar uma opção mais simples para começarmos?`
+        : `Perfeito, ${name}. Pelo que você comentou, faz sentido eu te mandar uma proposta objetiva com o que entraria, prazo e investimento. Posso seguir por esse caminho?`;
+    setDraft(text);
+    setAssistantNote("Sugestão colocada no campo de mensagem. Revise antes de enviar.");
   }
 
   async function deleteConversation(contactId: string) {
@@ -220,6 +415,7 @@ export function InboxClient({
       setContacts(remainingContacts);
       setMessages((current) => current.filter((message) => message.contactId !== contactId));
       setDeals((current) => current.filter((deal) => deal.contactId !== contactId));
+      setActivities((current) => current.filter((activity) => activity.contactId !== contactId));
       setSelectedId((current) => (current === contactId ? remainingContacts[0]?.id : current));
       router.refresh();
     } catch (error) {
@@ -276,7 +472,7 @@ export function InboxClient({
   }
 
   return (
-    <section className="card inbox">
+    <section className="card inbox inbox-fixed">
       <aside className="thread-list">
         <div className="thread-list-head">
           <h2>Conversas</h2>
@@ -294,7 +490,7 @@ export function InboxClient({
         ))}
       </aside>
 
-      <div className="chat">
+      <div className="chat chat-fixed">
         <header className="chat-head">
           <div>
             <h2 style={{ marginBottom: 4 }}>{selected?.name}</h2>
@@ -332,9 +528,7 @@ export function InboxClient({
                 </select>
               </label>
 
-              <button className="btn mini secondary" onClick={() => scheduleFollowUp(24)} disabled={!selected || schedulingFollowUp}>
-                {schedulingFollowUp ? "Agendando..." : "Follow-up amanhã"}
-              </button>
+              <button className="btn mini secondary" onClick={openDealEditor} disabled={!selectedDeal}>Editar oportunidade</button>
               <button className="btn mini secondary" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
                 {deleting ? "Excluindo..." : "Excluir conversa"}
               </button>
@@ -343,38 +537,113 @@ export function InboxClient({
           </div>
         </header>
 
-        <div className="quick-replies" aria-label="Respostas rápidas">
-          <span className="muted">Respostas rápidas:</span>
-          {quickReplies.map((reply) => (
-            <button key={reply.label} type="button" className="quick-reply" onClick={() => setDraft(reply.text)}>
-              {reply.label}
-            </button>
-          ))}
+        <div className="conversation-tools" aria-label="Ferramentas da conversa">
+          <details className="tool-panel">
+            <summary>Respostas rápidas</summary>
+            <div className="tool-panel-body quick-replies-inline">
+              {quickReplies.map((reply) => (
+                <button key={reply.label} type="button" className="quick-reply" onClick={() => setDraft(reply.text)}>
+                  {reply.label}
+                </button>
+              ))}
+            </div>
+          </details>
+
+          <details className="tool-panel">
+            <summary>Follow-up</summary>
+            <div className="tool-panel-body followup-inline">
+              <input className="input input-compact" type="datetime-local" value={followUpAt} onChange={(event) => setFollowUpAt(event.target.value)} />
+              <button className="btn mini secondary" onClick={() => scheduleFollowUp(followUpAt)} disabled={!selected || schedulingFollowUp}>
+                {schedulingFollowUp ? "Agendando..." : "Agendar"}
+              </button>
+            </div>
+          </details>
+
+          <details className="tool-panel">
+            <summary>Proposta</summary>
+            <div className="tool-panel-body">
+              <button className="btn mini secondary" onClick={generateProposalDraft} disabled={!selected}>Gerar texto de proposta</button>
+              <p className="muted tool-hint">Gera um rascunho no campo de mensagem, sem enviar automaticamente.</p>
+            </div>
+          </details>
+
+          <details className="tool-panel">
+            <summary>Assistente IA</summary>
+            <div className="tool-panel-body quick-replies-inline">
+              <button className="quick-reply" onClick={summarizeConversation}>Resumo</button>
+              <button className="quick-reply" onClick={suggestNextReply}>Sugerir resposta</button>
+            </div>
+            {assistantNote && <p className="assistant-note">{assistantNote}</p>}
+          </details>
+
+          <details className="tool-panel">
+            <summary>Histórico</summary>
+            <div className="tool-panel-body timeline-list">
+              {commercialHistory.length === 0 ? (
+                <p className="muted tool-hint">Nenhum histórico ainda.</p>
+              ) : (
+                commercialHistory.map((item) => (
+                  <div key={item.id} className={`timeline-item ${item.tone || "neutral"}`}>
+                    <strong>{item.title}</strong>
+                    <span>{item.detail}</span>
+                    <small>{shortDate(item.date)}</small>
+                  </div>
+                ))
+              )}
+            </div>
+          </details>
         </div>
 
-        <div className="messages">
+        {editingDeal && selectedDeal && (
+          <div className="deal-edit-panel">
+            <div className="form-grid compact-grid">
+              <label className="form-row">
+                Título
+                <input className="input" value={dealForm.title} onChange={(event) => setDealForm((current) => ({ ...current, title: event.target.value }))} />
+              </label>
+              <label className="form-row">
+                Valor
+                <input className="input" value={dealForm.value} onChange={(event) => setDealForm((current) => ({ ...current, value: event.target.value }))} />
+              </label>
+              <label className="form-row">
+                Previsão
+                <input className="input" type="date" value={dealForm.expectedClose} onChange={(event) => setDealForm((current) => ({ ...current, expectedClose: event.target.value }))} />
+              </label>
+              <div className="deal-edit-actions">
+                <button className="btn mini" onClick={saveDeal} disabled={savingDeal}>{savingDeal ? "Salvando..." : "Salvar"}</button>
+                <button className="btn mini secondary" onClick={() => setEditingDeal(false)}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="messages messages-scroll">
           {threadMessages.length === 0 && (
             <div className="message-empty">
               <p className="muted">Nenhuma mensagem ainda. Envie a primeira mensagem para testar o fluxo.</p>
             </div>
           )}
           {threadMessages.map((message) => (
-            <div key={message.id} className={`message ${message.direction === "outbound" ? "outbound" : ""}`}>
+            <div key={message.id} className={`message ${message.direction === "outbound" ? "outbound" : ""} ${message.status === "failed" ? "failed" : ""}`}>
               {message.body}
               <br />
-              <small style={{ opacity: 0.72 }}>{shortDate(message.createdAt)} • {message.status}</small>
+              <small style={{ opacity: 0.72 }}>{shortDate(message.createdAt)} • {messageStatusLabel(message.status)}</small>
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         <footer className="composer">
-          <input
-            className="input"
+          <textarea
+            className="input composer-input"
             placeholder="Digite uma mensagem..."
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") sendMessage();
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+              }
             }}
           />
           <button className="btn" onClick={sendMessage}>Enviar</button>

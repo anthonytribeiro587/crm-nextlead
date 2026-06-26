@@ -5,7 +5,7 @@ import { InboxClient } from "@/components/InboxClient";
 import { getCrmData } from "@/lib/data";
 
 export default async function InboxPage({ searchParams }: { searchParams?: { contact?: string } }) {
-  const { contacts, messages, deals, stages } = await getCrmData();
+  const { contacts, messages, deals, stages, activities } = await getCrmData();
 
   return (
     <>
@@ -17,7 +17,7 @@ export default async function InboxPage({ searchParams }: { searchParams?: { con
         </div>
         <span className="badge hot">Evolution API conectada</span>
       </div>
-      <InboxClient contacts={contacts} messages={messages} deals={deals} stages={stages} initialSelectedId={searchParams?.contact} />
+      <InboxClient contacts={contacts} messages={messages} deals={deals} stages={stages} activities={activities} initialSelectedId={searchParams?.contact} />
     </>
   );
 }
