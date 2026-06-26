@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { normalizeBrazilWhatsAppPhone } from "@/lib/format";
+import { brazilPhoneVariants, normalizeBrazilWhatsAppPhone } from "@/lib/format";
 import { ensureDefaultPipeline } from "@/lib/default-pipeline";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth-server";
 
@@ -139,18 +139,61 @@ export async function POST(request: NextRequest) {
 
   const contactPayloadWithOwner = { ...contactPayload, owner };
 
-  let contactResult: any = await supabase
+  const variants = brazilPhoneVariants(phone);
+  const { data: possibleContacts } = await supabase
     .from("contacts")
-    .upsert(contactPayloadWithOwner, { onConflict: "phone" })
-    .select("id")
-    .single();
+    .select("id,phone")
+    .in("phone", variants.length ? variants : [phone])
+    .limit(10);
 
-  if (contactResult.error?.message.toLowerCase().includes("owner")) {
+  const existingContact =
+    possibleContacts?.find((item: any) => item.phone === phone) ||
+    possibleContacts?.[0];
+
+  let contactResult: any;
+
+  if (existingContact?.id) {
     contactResult = await supabase
       .from("contacts")
-      .upsert(contactPayload, { onConflict: "phone" })
+      .update(contactPayloadWithOwner)
+      .eq("id", existingContact.id)
       .select("id")
       .single();
+
+    if (contactResult.error?.message.toLowerCase().includes("owner")) {
+      contactResult = await supabase
+        .from("contacts")
+        .update(contactPayload)
+        .eq("id", existingContact.id)
+        .select("id")
+        .single();
+    }
+
+    // Fallback se o telefone normalizado conflitar com algum contato duplicado antigo.
+    if (contactResult.error?.message.toLowerCase().includes("duplicate") || contactResult.error?.message.toLowerCase().includes("unique")) {
+      const safePayload = { ...contactPayload };
+      delete (safePayload as any).phone;
+      contactResult = await supabase
+        .from("contacts")
+        .update(safePayload)
+        .eq("id", existingContact.id)
+        .select("id")
+        .single();
+    }
+  } else {
+    contactResult = await supabase
+      .from("contacts")
+      .upsert(contactPayloadWithOwner, { onConflict: "phone" })
+      .select("id")
+      .single();
+
+    if (contactResult.error?.message.toLowerCase().includes("owner")) {
+      contactResult = await supabase
+        .from("contacts")
+        .upsert(contactPayload, { onConflict: "phone" })
+        .select("id")
+        .single();
+    }
   }
 
   const contact = contactResult.data;

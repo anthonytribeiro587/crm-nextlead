@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "./supabase-admin";
+import { brazilPhoneVariants } from "./format";
 
 function onlyDigits(value: unknown) {
   return String(value || "").replace(/\D/g, "");
@@ -112,24 +113,43 @@ async function upsertContactSafe(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   input: { phone: string; name: string; createdAt: string },
 ) {
-  const { data: existing } = await supabase
+  const variants = brazilPhoneVariants(input.phone);
+  const { data: possibleContacts } = await supabase
     .from("contacts")
-    .select("id,name,company")
-    .eq("phone", input.phone)
-    .limit(1)
-    .maybeSingle();
+    .select("id,name,company,phone")
+    .in("phone", variants.length ? variants : [input.phone])
+    .limit(10);
 
-  // Se o contato já veio da landing, preserva nome/empresa e só atualiza o último contato.
+  const existing =
+    possibleContacts?.find((contact: any) => contact.phone === input.phone) ||
+    possibleContacts?.[0];
+
+  // Se o contato já veio da landing/manual, preserva nome/empresa e só atualiza o último contato.
+  // Também normaliza o telefone salvo para evitar duplicar quando o WhatsApp responder com 55 + DDD.
   if (existing?.id) {
-    const result = await supabase
+    let result = await supabase
       .from("contacts")
       .update({
+        phone: input.phone,
         last_message_at: input.createdAt,
         updated_at: new Date().toISOString(),
       })
       .eq("id", existing.id)
       .select("id,name")
       .single();
+
+    // Fallback se houver conflito de telefone por algum contato duplicado antigo.
+    if (result.error) {
+      result = await supabase
+        .from("contacts")
+        .update({
+          last_message_at: input.createdAt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id)
+        .select("id,name")
+        .single();
+    }
 
     if (!result.error && result.data?.id) return result;
     return { data: { id: existing.id, name: existing.name }, error: null } as any;

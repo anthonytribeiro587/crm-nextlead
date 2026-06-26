@@ -34,3 +34,35 @@ export function normalizeBrazilWhatsAppPhone(value: string) {
 
   return digits;
 }
+
+
+export function brazilPhoneVariants(value: string) {
+  const digits = onlyDigits(value || "");
+  const normalized = normalizeBrazilWhatsAppPhone(value || "");
+  const variants = new Set<string>();
+
+  if (digits) variants.add(digits);
+  if (normalized) variants.add(normalized);
+
+  if (normalized.startsWith("55")) {
+    const local = normalized.slice(2);
+    if (local) variants.add(local);
+
+    // Compatibilidade Brasil: alguns JIDs/contatos podem aparecer com ou sem o nono dígito.
+    // 55 + DDD + 9 + 8 dígitos => também tenta 55 + DDD + 8 dígitos.
+    if (normalized.length === 13 && normalized[4] === "9") {
+      const withoutNinthDigit = `${normalized.slice(0, 4)}${normalized.slice(5)}`;
+      variants.add(withoutNinthDigit);
+      variants.add(withoutNinthDigit.slice(2));
+    }
+
+    // 55 + DDD + 8 dígitos => também tenta 55 + DDD + 9 + 8 dígitos.
+    if (normalized.length === 12) {
+      const withNinthDigit = `${normalized.slice(0, 4)}9${normalized.slice(4)}`;
+      variants.add(withNinthDigit);
+      variants.add(withNinthDigit.slice(2));
+    }
+  }
+
+  return Array.from(variants).filter(Boolean);
+}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { normalizeBrazilWhatsAppPhone } from "@/lib/format";
+import { brazilPhoneVariants, normalizeBrazilWhatsAppPhone } from "@/lib/format";
 import { getWhatsAppProvider, sendWhatsAppText } from "@/lib/whatsapp";
 
 async function saveOutboundMessage(input: {
@@ -17,13 +17,39 @@ async function saveOutboundMessage(input: {
 
   let resolvedContactId = input.contactId;
 
-  if (!resolvedContactId) {
-    const { data: contact } = await supabase
+  if (resolvedContactId) {
+    // Quando o contato veio de landing/manual com telefone sem 55, normaliza no primeiro envio.
+    const updateWithPhone = await supabase
       .from("contacts")
-      .upsert({ phone: input.to, name: input.to, source: "WhatsApp", owner: "NextLead", updated_at: new Date().toISOString() }, { onConflict: "phone" })
-      .select("id")
-      .single();
-    resolvedContactId = contact?.id;
+      .update({ phone: input.to, last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", resolvedContactId);
+
+    if (updateWithPhone.error) {
+      await supabase
+        .from("contacts")
+        .update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", resolvedContactId);
+    }
+  }
+
+  if (!resolvedContactId) {
+    const variants = brazilPhoneVariants(input.to);
+    const { data: existing } = await supabase
+      .from("contacts")
+      .select("id,phone")
+      .in("phone", variants.length ? variants : [input.to])
+      .limit(10);
+
+    resolvedContactId = (existing?.find((item: any) => item.phone === input.to) || existing?.[0])?.id;
+
+    if (!resolvedContactId) {
+      const { data: contact } = await supabase
+        .from("contacts")
+        .upsert({ phone: input.to, name: input.to, source: "WhatsApp", owner: "NextLead", updated_at: new Date().toISOString() }, { onConflict: "phone" })
+        .select("id")
+        .single();
+      resolvedContactId = contact?.id;
+    }
   }
 
   if (!resolvedContactId) return null;
