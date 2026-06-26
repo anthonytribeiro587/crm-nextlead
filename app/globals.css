@@ -342,6 +342,23 @@ td { color: #dbe7f8; font-size: .9rem; }
 .message.outbound { align-self: flex-end; background: linear-gradient(135deg, rgba(124,60,255,.96), rgba(47,107,255,.94)); }
 .composer { display: flex; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--line); }
 
+.lead-stage-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.btn.active-action {
+  border-color: rgba(42, 213, 255, .42);
+  background: rgba(42, 213, 255, .12);
+  color: #dff8ff;
+}
+.inbox-action-alert {
+  margin: 10px 20px 0;
+  padding: 10px 12px;
+}
+
+
 .input, .textarea, .select {
   width: 100%;
   border: 1px solid var(--line);

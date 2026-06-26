@@ -2,19 +2,78 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Contact, Message } from "@/lib/types";
+import type { Contact, Deal, Message, Stage } from "@/lib/types";
 import { shortDate } from "@/lib/format";
 
-export function InboxClient({ contacts: initialContacts, messages: initialMessages }: { contacts: Contact[]; messages: Message[] }) {
+export function InboxClient({
+  contacts: initialContacts,
+  messages: initialMessages,
+  deals: initialDeals,
+  stages,
+}: {
+  contacts: Contact[];
+  messages: Message[];
+  deals: Deal[];
+  stages: Stage[];
+}) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
   const [selectedId, setSelectedId] = useState(initialContacts[0]?.id);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [deals, setDeals] = useState<Deal[]>(initialDeals);
   const [draft, setDraft] = useState("");
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [moving, setMoving] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
 
   const selected = contacts.find((contact) => contact.id === selectedId) || contacts[0];
+  const selectedDeal = useMemo(() => deals.find((deal) => deal.contactId === selected?.id && deal.status !== "perdido"), [deals, selected?.id]);
+  const targetStages = useMemo(() => {
+    const wanted = ["Contato feito", "Diagnóstico", "Proposta enviada", "Negociação", "Fechado"];
+    return wanted
+      .map((title) => stages.find((stage) => stage.title.toLowerCase() === title.toLowerCase()))
+      .filter(Boolean) as Stage[];
+  }, [stages]);
   const threadMessages = useMemo(() => messages.filter((message) => message.contactId === selected?.id), [messages, selected?.id]);
+
+  async function moveSelectedDeal(stage: Stage) {
+    if (!selected || !selectedDeal) {
+      setActionMessage("Este contato ainda não tem oportunidade vinculada.");
+      return;
+    }
+
+    const isClosed = stage.title.toLowerCase().includes("fechado");
+    setMoving(stage.id);
+    setActionMessage(null);
+
+    try {
+      const response = await fetch("/api/pipeline/deals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealId: selectedDeal.id,
+          stageId: stage.id,
+          status: isClosed ? "ganho" : "aberto",
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erro ao mover oportunidade.");
+
+      setDeals((current) =>
+        current.map((deal) =>
+          deal.id === selectedDeal.id
+            ? { ...deal, stageId: stage.id, status: isClosed ? "ganho" : "aberto" }
+            : deal,
+        ),
+      );
+      setActionMessage(`Oportunidade movida para ${stage.title}.`);
+      router.refresh();
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Erro ao mover oportunidade.");
+    } finally {
+      setMoving(null);
+    }
+  }
 
   async function deleteConversation(contactId: string) {
     const contact = contacts.find((item) => item.id === contactId);
@@ -96,7 +155,7 @@ export function InboxClient({ contacts: initialContacts, messages: initialMessag
         </div>
 
         {contacts.map((contact) => (
-          <button key={contact.id} className={`thread ${contact.id === selected?.id ? "active" : ""}`} onClick={() => setSelectedId(contact.id)}>
+          <button key={contact.id} className={`thread ${contact.id === selected?.id ? "active" : ""}`} onClick={() => { setSelectedId(contact.id); setActionMessage(null); }}>
             <span className="avatar">{contact.name.slice(0, 1)}</span>
             <span className="thread-copy">
               <strong>{contact.name}</strong>
@@ -114,11 +173,26 @@ export function InboxClient({ contacts: initialContacts, messages: initialMessag
           </div>
           <div className="chat-head-actions">
             <span className="badge">{selected?.temperature}</span>
+            <div className="lead-stage-actions" aria-label="Ações do funil">
+              {targetStages.map((stage) => (
+                <button
+                  key={stage.id}
+                  type="button"
+                  className={`btn mini secondary ${selectedDeal?.stageId === stage.id ? "active-action" : ""}`}
+                  onClick={() => moveSelectedDeal(stage)}
+                  disabled={!selectedDeal || moving === stage.id}
+                  title={`Mover para ${stage.title}`}
+                >
+                  {moving === stage.id ? "Movendo..." : stage.title.replace(" enviada", "")}
+                </button>
+              ))}
+            </div>
             <button className="btn mini secondary" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
               {deleting ? "Excluindo..." : "Excluir conversa"}
             </button>
           </div>
         </header>
+        {actionMessage && <div className="inline-alert inbox-action-alert">{actionMessage}</div>}
 
         <div className="messages">
           {threadMessages.length === 0 && (
