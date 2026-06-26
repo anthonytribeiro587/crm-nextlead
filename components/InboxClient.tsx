@@ -26,11 +26,13 @@ export function InboxClient({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
   const [updatingLead, setUpdatingLead] = useState(false);
+  const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
 
   const selected = contacts.find((contact) => contact.id === selectedId) || contacts[0];
-  const selectedDeal = useMemo(() => deals.find((deal) => deal.contactId === selected?.id && deal.status !== "perdido"), [deals, selected?.id]);
+  const selectedDeal = useMemo(() => deals.find((deal) => deal.contactId === selected?.id), [deals, selected?.id]);
+  const selectedDealStatus = selectedDeal?.status === "perdido" ? "perdido" : selectedDeal?.stageId || "";
   const targetStages = useMemo(() => {
     const wanted = ["Contato feito", "Diagnóstico", "Proposta enviada", "Negociação", "Fechado"];
     return wanted
@@ -75,6 +77,7 @@ export function InboxClient({
           dealId: selectedDeal.id,
           stageId: stage.id,
           status: isClosed ? "ganho" : "aberto",
+          lostReason: null,
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -83,7 +86,7 @@ export function InboxClient({
       setDeals((current) =>
         current.map((deal) =>
           deal.id === selectedDeal.id
-            ? { ...deal, stageId: stage.id, status: isClosed ? "ganho" : "aberto" }
+            ? { ...deal, stageId: stage.id, status: isClosed ? "ganho" : "aberto", lostReason: undefined }
             : deal,
         ),
       );
@@ -131,6 +134,18 @@ export function InboxClient({
     }
   }
 
+
+  function handleStageChange(value: string) {
+    if (!value) return;
+    if (value === "perdido") {
+      markSelectedDealLost();
+      return;
+    }
+
+    const stage = targetStages.find((item) => item.id === value);
+    if (stage) moveSelectedDeal(stage);
+  }
+
   async function updateTemperature(temperature: LeadTemperature) {
     if (!selected) return;
     setUpdatingLead(true);
@@ -156,9 +171,10 @@ export function InboxClient({
   }
 
   async function scheduleFollowUp(hours = 24) {
-    if (!selected) return;
+    if (!selected || schedulingFollowUp) return;
 
     const dueAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    setSchedulingFollowUp(true);
     setActionMessage(null);
 
     try {
@@ -174,10 +190,16 @@ export function InboxClient({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Erro ao agendar follow-up.");
 
-      setActionMessage(`Follow-up agendado para ${new Date(dueAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`);
+      setActionMessage(
+        result.duplicate
+          ? "Já existe um follow-up pendente para este lead."
+          : `Follow-up agendado para ${new Date(dueAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.`,
+      );
       router.refresh();
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Erro ao agendar follow-up.");
+    } finally {
+      setSchedulingFollowUp(false);
     }
   }
 
@@ -279,43 +301,44 @@ export function InboxClient({
             <span className="muted">{selected?.phone} • {selected?.company || "sem empresa"}</span>
           </div>
           <div className="chat-head-actions">
-            <span className="badge">{selected?.temperature}</span>
-            <div className="temperature-actions" aria-label="Qualificação do lead">
-              {(["frio", "morno", "quente"] as LeadTemperature[]).map((temperature) => (
-                <button
-                  key={temperature}
-                  type="button"
-                  className={`btn mini secondary ${selected?.temperature === temperature ? "active-action" : ""}`}
-                  onClick={() => updateTemperature(temperature)}
-                  disabled={updatingLead || selected?.temperature === temperature}
+            <div className="lead-action-controls">
+              <label className="action-field">
+                <span>Temperatura</span>
+                <select
+                  className="mini-select"
+                  value={selected?.temperature || "morno"}
+                  onChange={(event) => updateTemperature(event.target.value as LeadTemperature)}
+                  disabled={updatingLead || !selected}
                 >
-                  {temperature}
-                </button>
-              ))}
-            </div>
-            <div className="lead-stage-actions" aria-label="Ações do funil">
-              {targetStages.map((stage) => (
-                <button
-                  key={stage.id}
-                  type="button"
-                  className={`btn mini secondary ${selectedDeal?.stageId === stage.id ? "active-action" : ""}`}
-                  onClick={() => moveSelectedDeal(stage)}
-                  disabled={!selectedDeal || moving === stage.id}
-                  title={`Mover para ${stage.title}`}
+                  <option value="frio">Frio</option>
+                  <option value="morno">Morno</option>
+                  <option value="quente">Quente</option>
+                </select>
+              </label>
+
+              <label className="action-field action-field-wide">
+                <span>Etapa</span>
+                <select
+                  className={`mini-select ${selectedDeal?.status === "perdido" ? "danger-select" : ""}`}
+                  value={selectedDealStatus}
+                  onChange={(event) => handleStageChange(event.target.value)}
+                  disabled={!selectedDeal || Boolean(moving)}
                 >
-                  {moving === stage.id ? "Movendo..." : stage.title.replace(" enviada", "")}
-                </button>
-              ))}
-              <button className="btn mini danger" onClick={markSelectedDealLost} disabled={!selectedDeal || moving === "perdido"}>
-                {moving === "perdido" ? "Salvando..." : "Perdido"}
+                  <option value="" disabled>Sem oportunidade</option>
+                  {targetStages.map((stage) => (
+                    <option key={stage.id} value={stage.id}>{stage.title}</option>
+                  ))}
+                  <option value="perdido">Perdido</option>
+                </select>
+              </label>
+
+              <button className="btn mini secondary" onClick={() => scheduleFollowUp(24)} disabled={!selected || schedulingFollowUp}>
+                {schedulingFollowUp ? "Agendando..." : "Follow-up amanhã"}
+              </button>
+              <button className="btn mini secondary" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
+                {deleting ? "Excluindo..." : "Excluir conversa"}
               </button>
             </div>
-            <button className="btn mini secondary" onClick={() => scheduleFollowUp(24)} disabled={!selected}>
-              Follow-up amanhã
-            </button>
-            <button className="btn mini secondary" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
-              {deleting ? "Excluindo..." : "Excluir conversa"}
-            </button>
             {actionMessage && <span className="stage-feedback">{actionMessage}</span>}
           </div>
         </header>

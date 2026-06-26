@@ -13,7 +13,12 @@ export default async function DashboardPage() {
   const openDeals = deals.filter((deal) => deal.status === "aberto");
   const totalPipeline = openDeals.reduce((sum, deal) => sum + deal.value, 0);
   const hotLeads = contacts.filter((contact) => contact.temperature === "quente").length;
-  const pendingActivities = activities.filter((activity) => !activity.done).length;
+  const pendingActivityKeys = new Set(
+    activities
+      .filter((activity) => !activity.done)
+      .map((activity) => `${activity.contactId}:${activity.title}:${new Date(activity.dueAt).toISOString().slice(0, 10)}`),
+  );
+  const pendingActivities = pendingActivityKeys.size;
 
   return (
     <>

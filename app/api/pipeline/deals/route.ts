@@ -35,7 +35,10 @@ export async function PATCH(request: NextRequest) {
 
   const update: Record<string, any> = { updated_at: new Date().toISOString() };
   if (stageId) update.stage_id = stageId;
-  if (status) update.status = status;
+  if (status) {
+    update.status = status;
+    if (status !== "perdido") update.lost_reason = null;
+  }
   if (lostReason !== undefined) update.lost_reason = String(lostReason || "").trim() || null;
   if (title !== undefined) update.title = String(title || "Nova oportunidade").trim();
 

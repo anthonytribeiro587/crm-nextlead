@@ -11,17 +11,33 @@ export function ActivityList({ activities: initialActivities, contacts }: { acti
   const [updating, setUpdating] = useState<string | null>(null);
   const router = useRouter();
 
+  function activityKey(activity: Activity) {
+    const date = new Date(activity.dueAt);
+    const day = Number.isNaN(date.getTime()) ? activity.dueAt.slice(0, 10) : date.toISOString().slice(0, 10);
+    return `${activity.contactId}:${activity.title}:${day}:${activity.done ? "done" : "pending"}`;
+  }
+
   const contactById = useMemo(() => new Map(contacts.map((contact) => [contact.id, contact])), [contacts]);
-  const pendingCount = useMemo(() => activities.filter((activity) => !activity.done).length, [activities]);
-  const orderedActivities = useMemo(() => {
+  const dedupedActivities = useMemo(() => {
+    const seen = new Set<string>();
     return [...activities]
-      .filter((activity) => showDone || !activity.done)
       .sort((a, b) => {
         if (a.done !== b.done) return a.done ? 1 : -1;
         return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
       })
+      .filter((activity) => {
+        const key = activityKey(activity);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [activities]);
+  const pendingCount = useMemo(() => dedupedActivities.filter((activity) => !activity.done).length, [dedupedActivities]);
+  const orderedActivities = useMemo(() => {
+    return dedupedActivities
+      .filter((activity) => showDone || !activity.done)
       .slice(0, 8);
-  }, [activities, showDone]);
+  }, [dedupedActivities, showDone]);
 
   async function toggleDone(activity: Activity, done: boolean) {
     setUpdating(activity.id);
@@ -29,12 +45,21 @@ export function ActivityList({ activities: initialActivities, contacts }: { acti
       const response = await fetch("/api/activities", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ activityId: activity.id, done }),
+        body: JSON.stringify({
+          activityId: activity.id,
+          done,
+          completeSimilar: done,
+          contactId: activity.contactId,
+          title: activity.title,
+          dueAt: activity.dueAt,
+        }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Erro ao atualizar tarefa.");
 
-      setActivities((current) => current.map((item) => (item.id === activity.id ? { ...item, done } : item)));
+      setActivities((current) =>
+        current.map((item) => (done && activityKey(item) === activityKey(activity)) || item.id === activity.id ? { ...item, done } : item),
+      );
       router.refresh();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Erro ao atualizar tarefa.");
