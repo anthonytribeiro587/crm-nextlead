@@ -214,12 +214,12 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
           <h2>Funil organizado</h2>
           <p className="muted">Filtre, mova oportunidades e abra o atendimento sem sair do pipeline.</p>
         </div>
-        <div className="pipeline-summary-mini pipeline-summary-grid">
-          <span><b>{visibleDeals.length}</b> oportunidades</span>
-          <span><b>{staleDeals}</b> paradas +7d</span>
-          <span><b>{proposalDeals}</b> propostas</span>
-          <span><b>{wonDeals}</b> fechadas</span>
-          <strong>{money(pipelineValue)}</strong>
+        <div className="pipeline-summary-inline" aria-label="Resumo do funil">
+          <span><strong>{visibleDeals.length}</strong> oportunidades</span>
+          <span><strong>{proposalDeals}</strong> propostas</span>
+          <span><strong>{staleDeals}</strong> paradas +7d</span>
+          <span><strong>{wonDeals}</strong> fechadas</span>
+          <b>{money(pipelineValue)}</b>
         </div>
       </div>
 

@@ -2689,3 +2689,170 @@ button:disabled {
     max-width: none;
   }
 }
+
+/* NextLead CRM — hotfix v7: etapa evidente, drawer com rolagem real e funil mais limpo */
+.chat-head-actions-pro {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+}
+.header-stage-field {
+  min-width: 178px;
+  display: grid;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(34, 211, 238, .22);
+  background: linear-gradient(135deg, rgba(8, 145, 178, .16), rgba(15, 23, 42, .34));
+}
+.header-stage-field span {
+  color: #67e8f9;
+  font-size: .62rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+}
+.header-stage-field select {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  font-weight: 950;
+  font-size: .82rem;
+}
+.header-stage-field select option,
+.mini-select option,
+.select option {
+  color: #0f172a;
+  background: #f8fafc;
+}
+.chat-context-pill {
+  min-width: 118px !important;
+  align-content: center;
+}
+.chat-context-pill span {
+  text-transform: uppercase;
+  letter-spacing: .09em;
+}
+.lead-inspector {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: auto !important;
+  width: min(430px, 94vw) !important;
+  max-width: 430px !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  padding: 16px !important;
+  border: 0 !important;
+  border-left: 1px solid rgba(148,163,184,.18) !important;
+  border-radius: 0 !important;
+  background: linear-gradient(180deg, rgba(10, 17, 31, .985), rgba(4, 10, 23, .995)) !important;
+  box-shadow: -28px 0 90px rgba(0,0,0,.62) !important;
+  overflow: hidden !important;
+  transform: translateX(100%) !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  transition: transform .22s ease !important;
+}
+.inbox-pro.inspector-open .lead-inspector {
+  transform: translateX(0) !important;
+  pointer-events: auto !important;
+}
+.inspector-drawer-head {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+  padding-bottom: 12px !important;
+  border-bottom: 1px solid rgba(148,163,184,.12);
+}
+.inspector-scroll-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 4px 92px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,.34) transparent;
+}
+.inspector-scroll-area::-webkit-scrollbar { width: 8px; }
+.inspector-scroll-area::-webkit-scrollbar-track { background: transparent; }
+.inspector-scroll-area::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,.32);
+  border-radius: 999px;
+}
+.inspector-content-card {
+  min-height: auto !important;
+  overflow: visible !important;
+  padding-bottom: 14px !important;
+}
+.inspector-section,
+.proposal-builder,
+.timeline-list-pro {
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+.proposal-builder .btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+.proposal-summary-pro {
+  margin-bottom: 16px;
+}
+.pipeline-command {
+  align-items: flex-start !important;
+  gap: 16px !important;
+}
+.pipeline-summary-inline {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  max-width: 640px;
+  color: var(--muted);
+}
+.pipeline-summary-inline span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, .10);
+  background: rgba(15, 23, 42, .32);
+  font-size: .76rem;
+  line-height: 1;
+}
+.pipeline-summary-inline strong {
+  color: var(--text);
+  font-size: .92rem;
+}
+.pipeline-summary-inline b {
+  margin-left: 2px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: var(--text);
+  background: linear-gradient(135deg, rgba(124,58,237,.20), rgba(14,165,233,.14));
+  border: 1px solid rgba(34,211,238,.16);
+  font-size: 1rem;
+  white-space: nowrap;
+}
+@media (max-width: 1180px) {
+  .header-stage-field { min-width: 160px; }
+  .pipeline-summary-inline { justify-content: flex-start; max-width: none; }
+}
+@media (max-width: 760px) {
+  .lead-inspector { width: 100vw !important; max-width: none !important; }
+  .chat-head-actions-pro { justify-content: flex-start !important; }
+  .header-stage-field { width: 100%; }
+}

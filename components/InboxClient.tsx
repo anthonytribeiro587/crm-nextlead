@@ -201,6 +201,35 @@ export function InboxClient({
   }, [contactActivities, selectedDeal, selectedStage?.title, threadMessages]);
 
   useEffect(() => {
+    setContacts(initialContacts);
+    setMessages(initialMessages);
+    setDeals(initialDeals);
+    setActivities(initialActivities);
+    setSelectedId((current) => {
+      const urlSelected = initialContacts.find((contact) => contact.id === initialSelectedId)?.id;
+      if (urlSelected) return urlSelected;
+      return initialContacts.some((contact) => contact.id === current) ? current : initialContacts[0]?.id;
+    });
+  }, [initialActivities, initialContacts, initialDeals, initialMessages, initialSelectedId]);
+
+  useEffect(() => {
+    function refreshOnReturn() {
+      router.refresh();
+    }
+
+    function refreshOnVisible() {
+      if (document.visibilityState === "visible") router.refresh();
+    }
+
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshOnVisible);
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshOnVisible);
+    };
+  }, [router]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [selectedId, threadMessages.length]);
 
@@ -642,9 +671,23 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
           </div>
           <div className="chat-head-actions-pro">
             <div className="chat-context-pill">
-              <span>{selectedStage?.title || (selectedDeal?.status === "perdido" ? "Perdido" : "Sem etapa")}</span>
+              <span>Oportunidade</span>
               <strong>{selectedDeal ? money(selectedDeal.value) : "R$ 0,00"}</strong>
             </div>
+            <label className="header-stage-field">
+              <span>Etapa atual</span>
+              <select
+                value={selectedDealStatus}
+                onChange={(event) => handleStageChange(event.target.value)}
+                disabled={!selectedDeal || Boolean(moving)}
+              >
+                <option value="" disabled>Sem oportunidade</option>
+                {targetStages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>{stage.title}</option>
+                ))}
+                <option value="perdido">Perdido</option>
+              </select>
+            </label>
             <button className="btn mini" onClick={() => openInspector("acoes")}>Ferramentas</button>
           </div>
         </header>
@@ -692,6 +735,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
           <button className="btn mini secondary" onClick={() => setShowInspector(false)}>Fechar</button>
         </div>
 
+        <div className="inspector-scroll-area">
         <div className="inspector-card lead-status-card">
           <div className="inspector-headline">
             <span className="eyebrow-small">Dados comerciais</span>
@@ -882,6 +926,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
               </div>
             </div>
           )}
+        </div>
         </div>
       </aside>
     </section>
