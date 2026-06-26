@@ -524,16 +524,9 @@ export function InboxClient({
               <span>{selectedStage?.title || (selectedDeal?.status === "perdido" ? "Perdido" : "Sem etapa")}</span>
               <strong>{selectedDeal ? money(selectedDeal.value) : "R$ 0,00"}</strong>
             </div>
-            <button className="btn mini secondary" onClick={() => setShowInspector(true)}>Ver detalhes</button>
+            <button className="btn mini" onClick={() => openInspector("acoes")}>Ferramentas</button>
           </div>
         </header>
-
-        <div className="chat-tool-strip" aria-label="Ações do atendimento">
-          <button className={activePanel === "acoes" && showInspector ? "active" : ""} onClick={() => openInspector("acoes")}>Ações</button>
-          <button className={activePanel === "proposta" && showInspector ? "active" : ""} onClick={() => openInspector("proposta")}>Proposta</button>
-          <button className={activePanel === "assistente" && showInspector ? "active" : ""} onClick={() => openInspector("assistente")}>IA</button>
-          <button className={activePanel === "historico" && showInspector ? "active" : ""} onClick={() => openInspector("historico")}>Histórico</button>
-        </div>
 
         <div className="messages messages-scroll messages-pro">
           {threadMessages.length === 0 && (
@@ -566,6 +559,8 @@ export function InboxClient({
           <button className="btn" onClick={sendMessage}>Enviar</button>
         </footer>
       </div>
+
+      {showInspector && <button className="inspector-backdrop" aria-label="Fechar painel" onClick={() => setShowInspector(false)} />}
 
       <aside className="lead-inspector" aria-label="Painel do lead">
         <div className="inspector-drawer-head">

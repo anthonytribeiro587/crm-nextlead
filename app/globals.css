@@ -2231,3 +2231,234 @@ button:disabled {
   .chat-head-actions-pro { justify-content: flex-start; }
   .pipeline-toolbar { grid-template-columns: 1fr; }
 }
+
+
+/* NextLead CRM — Inbox clean v6: chat primeiro, ferramentas em drawer real */
+.inbox-pro {
+  grid-template-columns: 320px minmax(0, 1fr) !important;
+  height: min(690px, calc(100dvh - 210px));
+  min-height: 620px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(15,23,42,.72), rgba(8,15,29,.86));
+}
+.thread-list-pro {
+  background: rgba(15, 23, 42, .46);
+  border-right: 1px solid rgba(148,163,184,.12);
+}
+.thread-pro {
+  min-height: 68px;
+  border-radius: 17px;
+  padding: 12px;
+}
+.thread-pro.active {
+  background: linear-gradient(135deg, rgba(79, 70, 229, .26), rgba(14, 165, 233, .09));
+  border-color: rgba(96,165,250,.20);
+}
+.thread-temp {
+  margin-left: auto;
+  align-self: flex-start;
+  opacity: .78;
+  font-size: .62rem;
+  letter-spacing: .05em;
+}
+.chat-pro {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+}
+.chat-head-pro {
+  min-height: 86px;
+  padding: 16px 20px;
+  background: rgba(5, 11, 24, .22);
+  border-bottom: 1px solid rgba(148,163,184,.11);
+}
+.contact-title-block .eyebrow-small {
+  color: #22d3ee;
+  letter-spacing: .18em;
+}
+.contact-title-block h2 {
+  font-size: 1.13rem;
+  margin-top: 4px;
+}
+.chat-head-actions-pro {
+  gap: 8px;
+}
+.chat-context-pill {
+  min-width: 122px;
+  padding: 9px 13px;
+  border-radius: 15px;
+  background: rgba(15,23,42,.56);
+  border-color: rgba(148,163,184,.14);
+}
+.chat-context-pill span {
+  font-size: .68rem;
+  opacity: .78;
+}
+.chat-context-pill strong {
+  font-size: .86rem;
+}
+.chat-tool-strip {
+  display: none !important;
+}
+.messages-pro {
+  min-height: 0;
+  padding: 18px 20px 16px;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(4, 10, 23, .10), rgba(4, 10, 23, .24));
+  scrollbar-color: rgba(148,163,184,.35) transparent;
+  scrollbar-width: thin;
+}
+.messages-pro::-webkit-scrollbar,
+.lead-inspector::-webkit-scrollbar,
+.inspector-content-card::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.messages-pro::-webkit-scrollbar-track,
+.lead-inspector::-webkit-scrollbar-track,
+.inspector-content-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+.messages-pro::-webkit-scrollbar-thumb,
+.lead-inspector::-webkit-scrollbar-thumb,
+.inspector-content-card::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,.30);
+  border-radius: 999px;
+}
+.messages-pro .message {
+  max-width: min(540px, 58%);
+  padding: 10px 12px;
+  border-radius: 15px;
+  font-size: .84rem;
+  line-height: 1.42;
+  background: rgba(30,41,59,.78);
+  border: 1px solid rgba(148,163,184,.06);
+}
+.messages-pro .message.outbound {
+  max-width: min(560px, 62%);
+  background: linear-gradient(135deg, rgba(109, 40, 217, .92), rgba(37, 99, 235, .92));
+}
+.messages-pro .message small {
+  margin-top: 4px;
+  font-size: .68rem;
+  opacity: .76;
+}
+.composer-pro {
+  padding: 14px 18px;
+  background: rgba(5, 11, 24, .46);
+  border-top: 1px solid rgba(148,163,184,.12);
+}
+.composer-pro .composer-input {
+  min-height: 48px;
+  max-height: 112px;
+  font-size: .87rem;
+  line-height: 1.38;
+  padding: 13px 14px;
+  resize: vertical;
+}
+.composer-pro .btn {
+  min-height: 48px;
+  align-self: end;
+}
+
+.inspector-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  border: 0;
+  background: rgba(2, 6, 23, .50);
+  backdrop-filter: blur(3px);
+  cursor: default;
+}
+.lead-inspector {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 90 !important;
+  width: min(440px, 94vw) !important;
+  max-width: 440px !important;
+  height: 100dvh !important;
+  padding: 18px !important;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 12px;
+  border: 0 !important;
+  border-left: 1px solid rgba(148,163,184,.18) !important;
+  border-radius: 0 !important;
+  background: linear-gradient(180deg, rgba(10,17,31,.98), rgba(4,10,23,.99)) !important;
+  box-shadow: -28px 0 90px rgba(0,0,0,.62) !important;
+  transform: translateX(100%) !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: transform .22s ease;
+}
+.inbox-pro.inspector-open .lead-inspector {
+  transform: translateX(0) !important;
+  pointer-events: auto !important;
+}
+.inspector-drawer-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(148,163,184,.10);
+}
+.inspector-drawer-head strong {
+  font-size: 1.15rem;
+}
+.inspector-card {
+  background: rgba(15,23,42,.54) !important;
+  border: 1px solid rgba(148,163,184,.12);
+  border-radius: 18px;
+  padding: 13px;
+}
+.inspector-tabs {
+  position: static !important;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 !important;
+  background: transparent !important;
+}
+.inspector-tabs button {
+  min-width: 0;
+  padding: 8px 7px;
+  border-radius: 12px;
+  font-size: .72rem;
+  white-space: nowrap;
+}
+.inspector-content-card {
+  min-height: 0;
+  overflow-y: auto;
+}
+.lead-status-card .inspector-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.inspector-fields {
+  gap: 8px;
+}
+.mini-select,
+.input-compact,
+.quick-reply {
+  min-height: 38px;
+}
+.quick-replies-grid {
+  gap: 8px;
+}
+.timeline-item {
+  background: rgba(255,255,255,.024);
+}
+
+@media (max-width: 980px) {
+  .inbox-pro {
+    height: auto;
+    min-height: 0;
+    grid-template-columns: 1fr !important;
+  }
+  .chat-pro { min-height: 640px; }
+  .messages-pro .message,
+  .messages-pro .message.outbound { max-width: 88%; }
+}
