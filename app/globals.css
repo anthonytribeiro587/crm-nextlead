@@ -2599,3 +2599,93 @@ button:disabled {
   .pipeline-toolbar { grid-template-columns: 1fr; }
   .pipeline-summary-grid { text-align: left; min-width: 0; }
 }
+
+/* NextLead CRM — hotfix: drawer scroll + funil metrics organizados */
+.lead-inspector {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-bottom: 22px !important;
+}
+
+.inspector-content-card {
+  flex: 0 0 auto !important;
+  min-height: auto !important;
+  overflow: visible !important;
+  padding-bottom: 18px !important;
+}
+
+.inspector-section,
+.proposal-builder,
+.timeline-list-pro {
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.proposal-builder {
+  padding-bottom: 8px;
+}
+
+.proposal-builder .btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.proposal-summary-pro {
+  padding: 12px !important;
+  border-radius: 14px !important;
+  background: rgba(2, 6, 23, .28) !important;
+  border: 1px solid rgba(148, 163, 184, .10) !important;
+}
+
+.pipeline-command {
+  align-items: center;
+  gap: 18px;
+}
+
+.pipeline-summary-grid {
+  min-width: 360px;
+  max-width: 420px;
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(2, 6, 23, .24);
+  border: 1px solid rgba(148, 163, 184, .12);
+  gap: 8px;
+  text-align: left;
+}
+
+.pipeline-summary-grid span {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .42);
+  border: 1px solid rgba(148, 163, 184, .08);
+  font-size: .7rem;
+  line-height: 1.2;
+}
+
+.pipeline-summary-grid span b {
+  display: block;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.pipeline-summary-grid strong {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, .18), rgba(14, 165, 233, .12));
+  border: 1px solid rgba(34, 211, 238, .12);
+  text-align: right;
+  font-size: 1.2rem;
+}
+
+@media (max-width: 900px) {
+  .pipeline-summary-grid {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+  }
+}
