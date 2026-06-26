@@ -37,39 +37,55 @@ export function LoginForm() {
   }
 
   return (
-    <form className="login-card" onSubmit={login}>
-      <div className="login-logo">
-        <img src="/nextlead-logo.png" alt="NextLead" />
-      </div>
-      <p className="eyebrow">Acesso protegido</p>
-      <h1>Entrar no CRM</h1>
-      <p className="description">Acesse com seu usuário da NextLead.</p>
+    <div className="login-shell-pro">
+      <section className="login-pitch-panel">
+        <div className="login-logo login-logo-pro">
+          <img src="/nextlead-logo.png" alt="NextLead" />
+        </div>
+        <p className="eyebrow">CRM próprio</p>
+        <h1>Atendimento, funil e WhatsApp em um só lugar.</h1>
+        <p className="description">
+          Controle leads captados pelas landing pages, responda pelo WhatsApp e acompanhe cada oportunidade com follow-up e proposta.
+        </p>
+        <div className="login-feature-grid">
+          <span>WhatsApp conectado</span>
+          <span>Funil comercial</span>
+          <span>Follow-up</span>
+          <span>Propostas</span>
+        </div>
+      </section>
 
-      <label className="form-row">
-        Usuário
-        <select className="select" value={user} onChange={(event) => setUser(event.target.value)}>
-          <option value="Anthony">Anthony</option>
-          <option value="Felipe">Felipe</option>
-        </select>
-      </label>
+      <form className="login-card login-card-pro" onSubmit={login}>
+        <div>
+          <p className="eyebrow">Acesso protegido</p>
+          <h2>Entrar no CRM</h2>
+          <p className="description">Use seu usuário da NextLead para continuar.</p>
+        </div>
 
-      <label className="form-row" style={{ marginTop: 12 }}>
-        Senha
-        <input
-          className="input"
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="Digite sua senha"
-          autoFocus
-          required
-        />
-      </label>
+        <label className="form-row">
+          Usuário
+          <select className="select" value={user} onChange={(event) => setUser(event.target.value)}>
+            <option value="Anthony">Anthony</option>
+            <option value="Felipe">Felipe</option>
+          </select>
+        </label>
 
-      <div className="actions" style={{ marginTop: 16 }}>
-        <button className="btn" type="submit" disabled={loading}>{loading ? "Entrando..." : "Entrar"}</button>
-        {status && <span className="badge">{status}</span>}
-      </div>
-    </form>
+        <label className="form-row">
+          Senha
+          <input
+            className="input"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Digite sua senha"
+            autoFocus
+            required
+          />
+        </label>
+
+        <button className="btn login-submit" type="submit" disabled={loading}>{loading ? "Entrando..." : "Entrar no CRM"}</button>
+        {status && <span className="login-status">{status}</span>}
+      </form>
+    </div>
   );
 }

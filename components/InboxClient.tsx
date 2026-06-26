@@ -57,6 +57,7 @@ export function InboxClient({
   const [draft, setDraft] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [assistantNote, setAssistantNote] = useState<string | null>(null);
+  const [activePanel, setActivePanel] = useState<"acoes" | "proposta" | "assistente" | "historico">("acoes");
   const [moving, setMoving] = useState<string | null>(null);
   const [updatingLead, setUpdatingLead] = useState(false);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
@@ -148,6 +149,7 @@ export function InboxClient({
     setAssistantNote(null);
     setActionMessage(null);
     setFollowUpAt(tomorrowBusinessTime());
+    setActivePanel("acoes");
   }, [selected?.id]);
 
   async function moveSelectedDeal(stage: Stage) {
@@ -472,155 +474,51 @@ export function InboxClient({
   }
 
   return (
-    <section className="card inbox inbox-fixed">
-      <aside className="thread-list">
+    <section className="card inbox inbox-fixed inbox-pro">
+      <aside className="thread-list thread-list-pro">
         <div className="thread-list-head">
-          <h2>Conversas</h2>
+          <div>
+            <h2>Conversas</h2>
+            <span className="muted">Atendimentos ativos</span>
+          </div>
           <span className="thread-count">{contacts.length}</span>
         </div>
 
-        {contacts.map((contact) => (
-          <button key={contact.id} className={`thread ${contact.id === selected?.id ? "active" : ""}`} onClick={() => { setSelectedId(contact.id); setActionMessage(null); }}>
-            <span className="avatar">{contact.name.slice(0, 1)}</span>
-            <span className="thread-copy">
-              <strong>{contact.name}</strong>
-              <span className="muted">{contact.company || contact.source}</span>
-            </span>
-          </button>
-        ))}
+        <div className="thread-stack">
+          {contacts.map((contact) => (
+            <button
+              key={contact.id}
+              className={`thread thread-pro ${contact.id === selected?.id ? "active" : ""}`}
+              onClick={() => {
+                setSelectedId(contact.id);
+                setActionMessage(null);
+              }}
+            >
+              <span className="avatar">{contact.name.slice(0, 1)}</span>
+              <span className="thread-copy">
+                <strong>{contact.name}</strong>
+                <span className="muted">{contact.company || contact.source}</span>
+              </span>
+              <span className={`thread-temp ${contact.temperature}`}>{contact.temperature}</span>
+            </button>
+          ))}
+        </div>
       </aside>
 
-      <div className="chat chat-fixed">
-        <header className="chat-head chat-head-clean">
-          <div className="contact-summary">
+      <div className="chat chat-fixed chat-pro">
+        <header className="chat-head-pro">
+          <div className="contact-title-block">
             <span className="eyebrow-small">Contato em atendimento</span>
             <h2>{selected?.name}</h2>
             <span className="muted">{selected?.phone} • {selected?.company || "sem empresa"}</span>
           </div>
-          <div className="chat-head-actions lead-action-panel">
-            <div className="lead-action-controls">
-              <label className="action-field">
-                <span>Temperatura</span>
-                <select
-                  className="mini-select"
-                  value={selected?.temperature || "morno"}
-                  onChange={(event) => updateTemperature(event.target.value as LeadTemperature)}
-                  disabled={updatingLead || !selected}
-                >
-                  <option value="frio">Frio</option>
-                  <option value="morno">Morno</option>
-                  <option value="quente">Quente</option>
-                </select>
-              </label>
-
-              <label className="action-field action-field-wide">
-                <span>Etapa</span>
-                <select
-                  className={`mini-select ${selectedDeal?.status === "perdido" ? "danger-select" : ""}`}
-                  value={selectedDealStatus}
-                  onChange={(event) => handleStageChange(event.target.value)}
-                  disabled={!selectedDeal || Boolean(moving)}
-                >
-                  <option value="" disabled>Sem oportunidade</option>
-                  {targetStages.map((stage) => (
-                    <option key={stage.id} value={stage.id}>{stage.title}</option>
-                  ))}
-                  <option value="perdido">Perdido</option>
-                </select>
-              </label>
-
-              <div className="lead-action-buttons">
-                <button className="btn mini secondary" onClick={openDealEditor} disabled={!selectedDeal}>Editar oportunidade</button>
-                <button className="btn mini secondary danger-soft" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
-                  {deleting ? "Excluindo..." : "Excluir conversa"}
-                </button>
-              </div>
-            </div>
-            {actionMessage && <span className="stage-feedback">{actionMessage}</span>}
+          <div className="chat-context-pill">
+            <span>{selectedStage?.title || (selectedDeal?.status === "perdido" ? "Perdido" : "Sem etapa")}</span>
+            <strong>{selectedDeal ? money(selectedDeal.value) : "R$ 0,00"}</strong>
           </div>
         </header>
 
-        <div className="conversation-tools" aria-label="Ferramentas da conversa">
-          <details className="tool-panel">
-            <summary><span>Respostas rápidas</span></summary>
-            <div className="tool-panel-body quick-replies-inline">
-              {quickReplies.map((reply) => (
-                <button key={reply.label} type="button" className="quick-reply" onClick={() => setDraft(reply.text)}>
-                  {reply.label}
-                </button>
-              ))}
-            </div>
-          </details>
-
-          <details className="tool-panel">
-            <summary><span>Follow-up</span></summary>
-            <div className="tool-panel-body followup-inline">
-              <input className="input input-compact" type="datetime-local" value={followUpAt} onChange={(event) => setFollowUpAt(event.target.value)} />
-              <button className="btn mini secondary" onClick={() => scheduleFollowUp(followUpAt)} disabled={!selected || schedulingFollowUp}>
-                {schedulingFollowUp ? "Agendando..." : "Agendar"}
-              </button>
-            </div>
-          </details>
-
-          <details className="tool-panel">
-            <summary><span>Proposta</span></summary>
-            <div className="tool-panel-body">
-              <button className="btn mini secondary" onClick={generateProposalDraft} disabled={!selected}>Gerar texto de proposta</button>
-              <p className="muted tool-hint">Gera um rascunho no campo de mensagem, sem enviar automaticamente.</p>
-            </div>
-          </details>
-
-          <details className="tool-panel">
-            <summary><span>Assistente IA</span></summary>
-            <div className="tool-panel-body quick-replies-inline">
-              <button className="quick-reply" onClick={summarizeConversation}>Resumo</button>
-              <button className="quick-reply" onClick={suggestNextReply}>Sugerir resposta</button>
-            </div>
-            {assistantNote && <p className="assistant-note">{assistantNote}</p>}
-          </details>
-
-          <details className="tool-panel">
-            <summary><span>Histórico</span></summary>
-            <div className="tool-panel-body timeline-list">
-              {commercialHistory.length === 0 ? (
-                <p className="muted tool-hint">Nenhum histórico ainda.</p>
-              ) : (
-                commercialHistory.map((item) => (
-                  <div key={item.id} className={`timeline-item ${item.tone || "neutral"}`}>
-                    <strong>{item.title}</strong>
-                    <span>{item.detail}</span>
-                    <small>{shortDate(item.date)}</small>
-                  </div>
-                ))
-              )}
-            </div>
-          </details>
-        </div>
-
-        {editingDeal && selectedDeal && (
-          <div className="deal-edit-panel">
-            <div className="form-grid compact-grid">
-              <label className="form-row">
-                Título
-                <input className="input" value={dealForm.title} onChange={(event) => setDealForm((current) => ({ ...current, title: event.target.value }))} />
-              </label>
-              <label className="form-row">
-                Valor
-                <input className="input" value={dealForm.value} onChange={(event) => setDealForm((current) => ({ ...current, value: event.target.value }))} />
-              </label>
-              <label className="form-row">
-                Previsão
-                <input className="input" type="date" value={dealForm.expectedClose} onChange={(event) => setDealForm((current) => ({ ...current, expectedClose: event.target.value }))} />
-              </label>
-              <div className="deal-edit-actions">
-                <button className="btn mini" onClick={saveDeal} disabled={savingDeal}>{savingDeal ? "Salvando..." : "Salvar"}</button>
-                <button className="btn mini secondary" onClick={() => setEditingDeal(false)}>Cancelar</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="messages messages-scroll">
+        <div className="messages messages-scroll messages-pro">
           {threadMessages.length === 0 && (
             <div className="message-empty">
               <p className="muted">Nenhuma mensagem ainda. Envie a primeira mensagem para testar o fluxo.</p>
@@ -628,15 +526,14 @@ export function InboxClient({
           )}
           {threadMessages.map((message) => (
             <div key={message.id} className={`message ${message.direction === "outbound" ? "outbound" : ""} ${message.status === "failed" ? "failed" : ""}`}>
-              {message.body}
-              <br />
-              <small style={{ opacity: 0.72 }}>{shortDate(message.createdAt)} • {messageStatusLabel(message.status)}</small>
+              <span>{message.body}</span>
+              <small>{shortDate(message.createdAt)} • {messageStatusLabel(message.status)}</small>
             </div>
           ))}
           <div ref={messagesEndRef} />
         </div>
 
-        <footer className="composer">
+        <footer className="composer composer-pro">
           <textarea
             className="input composer-input"
             placeholder="Digite uma mensagem..."
@@ -652,6 +549,169 @@ export function InboxClient({
           <button className="btn" onClick={sendMessage}>Enviar</button>
         </footer>
       </div>
+
+      <aside className="lead-inspector" aria-label="Painel do lead">
+        <div className="inspector-card lead-status-card">
+          <div className="inspector-headline">
+            <span className="eyebrow-small">Dados comerciais</span>
+            <strong>{selectedDeal?.title || "Sem oportunidade"}</strong>
+          </div>
+
+          <div className="inspector-fields">
+            <label className="action-field">
+              <span>Temperatura</span>
+              <select
+                className="mini-select"
+                value={selected?.temperature || "morno"}
+                onChange={(event) => updateTemperature(event.target.value as LeadTemperature)}
+                disabled={updatingLead || !selected}
+              >
+                <option value="frio">Frio</option>
+                <option value="morno">Morno</option>
+                <option value="quente">Quente</option>
+              </select>
+            </label>
+
+            <label className="action-field">
+              <span>Etapa</span>
+              <select
+                className={`mini-select ${selectedDeal?.status === "perdido" ? "danger-select" : ""}`}
+                value={selectedDealStatus}
+                onChange={(event) => handleStageChange(event.target.value)}
+                disabled={!selectedDeal || Boolean(moving)}
+              >
+                <option value="" disabled>Sem oportunidade</option>
+                {targetStages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>{stage.title}</option>
+                ))}
+                <option value="perdido">Perdido</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="inspector-actions">
+            <button className="btn mini secondary" onClick={openDealEditor} disabled={!selectedDeal}>Editar oportunidade</button>
+            <button className="btn mini secondary danger-soft" onClick={() => selected && deleteConversation(selected.id)} disabled={deleting}>
+              {deleting ? "Excluindo..." : "Excluir conversa"}
+            </button>
+          </div>
+
+          {actionMessage && <span className="stage-feedback inspector-feedback">{actionMessage}</span>}
+        </div>
+
+        {editingDeal && selectedDeal && (
+          <div className="inspector-card deal-edit-panel-pro">
+            <div className="inspector-headline">
+              <span className="eyebrow-small">Editar oportunidade</span>
+              <strong>Ajustes rápidos</strong>
+            </div>
+            <label className="form-row">
+              Título
+              <input className="input" value={dealForm.title} onChange={(event) => setDealForm((current) => ({ ...current, title: event.target.value }))} />
+            </label>
+            <div className="form-grid compact-grid">
+              <label className="form-row">
+                Valor
+                <input className="input" value={dealForm.value} onChange={(event) => setDealForm((current) => ({ ...current, value: event.target.value }))} />
+              </label>
+              <label className="form-row">
+                Previsão
+                <input className="input" type="date" value={dealForm.expectedClose} onChange={(event) => setDealForm((current) => ({ ...current, expectedClose: event.target.value }))} />
+              </label>
+            </div>
+            <div className="inspector-actions">
+              <button className="btn mini" onClick={saveDeal} disabled={savingDeal}>{savingDeal ? "Salvando..." : "Salvar"}</button>
+              <button className="btn mini secondary" onClick={() => setEditingDeal(false)}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        <div className="inspector-tabs" role="tablist" aria-label="Ferramentas do atendimento">
+          <button className={activePanel === "acoes" ? "active" : ""} onClick={() => setActivePanel("acoes")}>Ações</button>
+          <button className={activePanel === "proposta" ? "active" : ""} onClick={() => setActivePanel("proposta")}>Proposta</button>
+          <button className={activePanel === "assistente" ? "active" : ""} onClick={() => setActivePanel("assistente")}>IA</button>
+          <button className={activePanel === "historico" ? "active" : ""} onClick={() => setActivePanel("historico")}>Histórico</button>
+        </div>
+
+        <div className="inspector-card inspector-content-card">
+          {activePanel === "acoes" && (
+            <div className="inspector-section">
+              <div className="inspector-headline">
+                <span className="eyebrow-small">Respostas rápidas</span>
+                <strong>Próximo contato</strong>
+              </div>
+              <div className="quick-replies-grid">
+                {quickReplies.map((reply) => (
+                  <button key={reply.label} type="button" className="quick-reply" onClick={() => setDraft(reply.text)}>
+                    {reply.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="followup-box">
+                <span className="eyebrow-small">Follow-up</span>
+                <input className="input input-compact" type="datetime-local" value={followUpAt} onChange={(event) => setFollowUpAt(event.target.value)} />
+                <button className="btn mini secondary" onClick={() => scheduleFollowUp(followUpAt)} disabled={!selected || schedulingFollowUp}>
+                  {schedulingFollowUp ? "Agendando..." : "Agendar follow-up"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activePanel === "proposta" && (
+            <div className="inspector-section">
+              <div className="inspector-headline">
+                <span className="eyebrow-small">Proposta</span>
+                <strong>Gerar rascunho</strong>
+              </div>
+              <p className="muted tool-hint">Cria um texto no campo de mensagem usando oportunidade, valor e prazo. Você revisa antes de enviar.</p>
+              <button className="btn mini" onClick={generateProposalDraft} disabled={!selected}>Gerar texto de proposta</button>
+              <div className="proposal-summary">
+                <span>Serviço</span>
+                <strong>{selectedDeal?.title || "Solução digital"}</strong>
+                <span>Valor</span>
+                <strong>{selectedDeal ? money(selectedDeal.value) : "A definir"}</strong>
+              </div>
+            </div>
+          )}
+
+          {activePanel === "assistente" && (
+            <div className="inspector-section">
+              <div className="inspector-headline">
+                <span className="eyebrow-small">Assistente IA</span>
+                <strong>Ajuda de atendimento</strong>
+              </div>
+              <div className="quick-replies-grid">
+                <button className="quick-reply" onClick={summarizeConversation}>Resumo</button>
+                <button className="quick-reply" onClick={suggestNextReply}>Sugerir resposta</button>
+              </div>
+              {assistantNote ? <p className="assistant-note">{assistantNote}</p> : <p className="muted tool-hint">Use para resumir a conversa ou montar uma resposta inicial. Ainda é local, sem API externa.</p>}
+            </div>
+          )}
+
+          {activePanel === "historico" && (
+            <div className="inspector-section">
+              <div className="inspector-headline">
+                <span className="eyebrow-small">Histórico</span>
+                <strong>Linha do tempo</strong>
+              </div>
+              <div className="timeline-list timeline-list-pro">
+                {commercialHistory.length === 0 ? (
+                  <p className="muted tool-hint">Nenhum histórico ainda.</p>
+                ) : (
+                  commercialHistory.map((item) => (
+                    <div key={item.id} className={`timeline-item ${item.tone || "neutral"}`}>
+                      <strong>{item.title}</strong>
+                      <span>{item.detail}</span>
+                      <small>{shortDate(item.date)}</small>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
     </section>
   );
 }
