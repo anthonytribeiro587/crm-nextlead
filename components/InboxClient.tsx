@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Contact, Deal, Message, Stage } from "@/lib/types";
+import type { Contact, Deal, LeadTemperature, Message, Stage } from "@/lib/types";
 import { shortDate } from "@/lib/format";
 
 export function InboxClient({
@@ -10,19 +10,22 @@ export function InboxClient({
   messages: initialMessages,
   deals: initialDeals,
   stages,
+  initialSelectedId,
 }: {
   contacts: Contact[];
   messages: Message[];
   deals: Deal[];
   stages: Stage[];
+  initialSelectedId?: string;
 }) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
-  const [selectedId, setSelectedId] = useState(initialContacts[0]?.id);
+  const [selectedId, setSelectedId] = useState(initialContacts.find((contact) => contact.id === initialSelectedId)?.id || initialContacts[0]?.id);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
   const [draft, setDraft] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
+  const [updatingLead, setUpdatingLead] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
 
@@ -35,6 +38,24 @@ export function InboxClient({
       .filter(Boolean) as Stage[];
   }, [stages]);
   const threadMessages = useMemo(() => messages.filter((message) => message.contactId === selected?.id), [messages, selected?.id]);
+
+  const quickReplies = useMemo(() => {
+    const name = selected?.name?.split(" ")[0] || "tudo bem";
+    return [
+      {
+        label: "Abordagem",
+        text: `Olá ${name}, tudo bem? Aqui é da NextLead. Vi seu interesse e posso te ajudar a entender o melhor caminho para sua página captar mais orçamentos.`,
+      },
+      {
+        label: "Perguntas",
+        text: `Perfeito, ${name}. Para eu te orientar melhor: qual serviço principal você quer divulgar, em qual cidade atende e hoje seus clientes chegam mais por indicação, Instagram ou Google?`,
+      },
+      {
+        label: "Follow-up",
+        text: `Oi ${name}, passando para saber se você conseguiu olhar a ideia. Posso te mandar uma sugestão objetiva de como ficaria a página para o seu negócio.`,
+      },
+    ];
+  }, [selected?.name]);
 
   async function moveSelectedDeal(stage: Stage) {
     if (!selected || !selectedDeal) {
@@ -75,6 +96,64 @@ export function InboxClient({
     }
   }
 
+  async function markSelectedDealLost() {
+    if (!selectedDeal) {
+      setActionMessage("Este contato ainda não tem oportunidade vinculada.");
+      return;
+    }
+
+    const lostReason = window.prompt("Motivo da perda?", "Sem retorno do cliente");
+    if (lostReason === null) return;
+
+    setMoving("perdido");
+    setActionMessage(null);
+
+    try {
+      const response = await fetch("/api/pipeline/deals", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealId: selectedDeal.id,
+          status: "perdido",
+          lostReason,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erro ao marcar como perdido.");
+
+      setDeals((current) => current.map((deal) => (deal.id === selectedDeal.id ? { ...deal, status: "perdido", lostReason } : deal)));
+      setActionMessage("Oportunidade marcada como perdida.");
+      router.refresh();
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Erro ao marcar como perdido.");
+    } finally {
+      setMoving(null);
+    }
+  }
+
+  async function updateTemperature(temperature: LeadTemperature) {
+    if (!selected) return;
+    setUpdatingLead(true);
+    setActionMessage(null);
+
+    try {
+      const response = await fetch(`/api/contacts/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ temperature }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erro ao atualizar lead.");
+
+      setContacts((current) => current.map((contact) => (contact.id === selected.id ? { ...contact, temperature } : contact)));
+      setActionMessage(`Lead marcado como ${temperature}.`);
+      router.refresh();
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Erro ao atualizar lead.");
+    } finally {
+      setUpdatingLead(false);
+    }
+  }
 
   async function scheduleFollowUp(hours = 24) {
     if (!selected) return;
@@ -118,6 +197,7 @@ export function InboxClient({
       const remainingContacts = contacts.filter((item) => item.id !== contactId);
       setContacts(remainingContacts);
       setMessages((current) => current.filter((message) => message.contactId !== contactId));
+      setDeals((current) => current.filter((deal) => deal.contactId !== contactId));
       setSelectedId((current) => (current === contactId ? remainingContacts[0]?.id : current));
       router.refresh();
     } catch (error) {
@@ -200,6 +280,19 @@ export function InboxClient({
           </div>
           <div className="chat-head-actions">
             <span className="badge">{selected?.temperature}</span>
+            <div className="temperature-actions" aria-label="Qualificação do lead">
+              {(["frio", "morno", "quente"] as LeadTemperature[]).map((temperature) => (
+                <button
+                  key={temperature}
+                  type="button"
+                  className={`btn mini secondary ${selected?.temperature === temperature ? "active-action" : ""}`}
+                  onClick={() => updateTemperature(temperature)}
+                  disabled={updatingLead || selected?.temperature === temperature}
+                >
+                  {temperature}
+                </button>
+              ))}
+            </div>
             <div className="lead-stage-actions" aria-label="Ações do funil">
               {targetStages.map((stage) => (
                 <button
@@ -213,6 +306,9 @@ export function InboxClient({
                   {moving === stage.id ? "Movendo..." : stage.title.replace(" enviada", "")}
                 </button>
               ))}
+              <button className="btn mini danger" onClick={markSelectedDealLost} disabled={!selectedDeal || moving === "perdido"}>
+                {moving === "perdido" ? "Salvando..." : "Perdido"}
+              </button>
             </div>
             <button className="btn mini secondary" onClick={() => scheduleFollowUp(24)} disabled={!selected}>
               Follow-up amanhã
@@ -223,6 +319,15 @@ export function InboxClient({
             {actionMessage && <span className="stage-feedback">{actionMessage}</span>}
           </div>
         </header>
+
+        <div className="quick-replies" aria-label="Respostas rápidas">
+          <span className="muted">Respostas rápidas:</span>
+          {quickReplies.map((reply) => (
+            <button key={reply.label} type="button" className="quick-reply" onClick={() => setDraft(reply.text)}>
+              {reply.label}
+            </button>
+          ))}
+        </div>
 
         <div className="messages">
           {threadMessages.length === 0 && (

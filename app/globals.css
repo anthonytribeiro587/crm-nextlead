@@ -1007,3 +1007,60 @@ button:disabled {
   .section-headline,
   .activity-card { align-items: flex-start; flex-direction: column; }
 }
+
+/* NextLead CRM - pacote produtividade comercial */
+.quick-replies {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, .10);
+  background: rgba(255,255,255,.015);
+}
+.quick-reply {
+  border: 1px solid rgba(148, 163, 184, .18);
+  background: rgba(255,255,255,.045);
+  color: #dbeafe;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 850;
+  font-size: .76rem;
+  cursor: pointer;
+}
+.quick-reply:hover {
+  border-color: rgba(42, 213, 255, .34);
+  background: rgba(42, 213, 255, .08);
+}
+.temperature-actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.temperature-actions .btn.mini {
+  text-transform: capitalize;
+  opacity: .86;
+}
+.activity-toolbar,
+.activity-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.activity-toolbar {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.activity-actions {
+  justify-content: flex-end;
+}
+.activity-card.done {
+  opacity: .62;
+}
+.activity-card.done strong {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: rgba(148, 163, 184, .45);
+}

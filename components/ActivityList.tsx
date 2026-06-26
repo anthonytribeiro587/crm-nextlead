@@ -1,23 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Activity, Contact } from "@/lib/types";
 
 export function ActivityList({ activities: initialActivities, contacts }: { activities: Activity[]; contacts: Contact[] }) {
   const [activities, setActivities] = useState<Activity[]>(initialActivities);
+  const [showDone, setShowDone] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const router = useRouter();
 
   const contactById = useMemo(() => new Map(contacts.map((contact) => [contact.id, contact])), [contacts]);
+  const pendingCount = useMemo(() => activities.filter((activity) => !activity.done).length, [activities]);
   const orderedActivities = useMemo(() => {
     return [...activities]
+      .filter((activity) => showDone || !activity.done)
       .sort((a, b) => {
         if (a.done !== b.done) return a.done ? 1 : -1;
         return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
       })
       .slice(0, 8);
-  }, [activities]);
+  }, [activities, showDone]);
 
   async function toggleDone(activity: Activity, done: boolean) {
     setUpdating(activity.id);
@@ -42,14 +46,28 @@ export function ActivityList({ activities: initialActivities, contacts }: { acti
   if (!orderedActivities.length) {
     return (
       <div className="empty-state">
-        <strong>Nenhuma tarefa ainda.</strong>
-        <p className="muted">Quando um lead entrar, o sistema cria uma tarefa de primeiro contato automaticamente.</p>
+        <strong>{pendingCount ? "Sem tarefas nesta visualização." : "Nenhuma tarefa pendente."}</strong>
+        <p className="muted">Quando um lead entrar ou você agendar follow-up, o sistema mostra aqui.</p>
+        {activities.some((activity) => activity.done) && (
+          <button className="btn mini secondary" onClick={() => setShowDone(!showDone)}>
+            {showDone ? "Ocultar concluídas" : "Mostrar concluídas"}
+          </button>
+        )}
       </div>
     );
   }
 
   return (
     <div className="activity-list">
+      <div className="activity-toolbar">
+        <span className="muted">{pendingCount} pendente{pendingCount === 1 ? "" : "s"}</span>
+        {activities.some((activity) => activity.done) && (
+          <button className="btn mini secondary" onClick={() => setShowDone(!showDone)}>
+            {showDone ? "Ocultar concluídas" : "Mostrar concluídas"}
+          </button>
+        )}
+      </div>
+
       {orderedActivities.map((activity) => {
         const contact = contactById.get(activity.contactId);
         const due = new Date(activity.dueAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -59,9 +77,12 @@ export function ActivityList({ activities: initialActivities, contacts }: { acti
               <strong>{activity.title}</strong>
               <p className="muted" style={{ margin: "5px 0 0" }}>{contact?.name || "Lead"} • {due}</p>
             </div>
-            <button className="btn mini secondary" onClick={() => toggleDone(activity, !activity.done)} disabled={updating === activity.id}>
-              {updating === activity.id ? "Salvando..." : activity.done ? "Reabrir" : "Concluir"}
-            </button>
+            <div className="activity-actions">
+              <Link className="btn mini secondary" href={`/inbox?contact=${activity.contactId}`}>Abrir</Link>
+              <button className="btn mini secondary" onClick={() => toggleDone(activity, !activity.done)} disabled={updating === activity.id}>
+                {updating === activity.id ? "Salvando..." : activity.done ? "Reabrir" : "Concluir"}
+              </button>
+            </div>
           </div>
         );
       })}
