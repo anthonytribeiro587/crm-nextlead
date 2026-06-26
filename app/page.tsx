@@ -22,42 +22,17 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <section className="hero">
-        <article className="card hero-card hero-card-main">
-          <div>
-            <div className="hero-logo">
-              <img src="/nextlead-logo.png" alt="NextLead" />
-            </div>
-            <p className="eyebrow">Sistema próprio</p>
-            <h1>CRM WhatsApp + funil para vender mais landing pages.</h1>
-            <p className="description">
-              Painel compacto para controlar conversas, leads, propostas e oportunidades da NextLead. O lead entra pela landing page, vira contato no CRM e já cai no funil comercial.
-            </p>
-          </div>
-          <div className="flow-line">
-            <span className="flow-chip">Landing Page</span>
-            <span className="flow-chip">WhatsApp</span>
-            <span className="flow-chip">CRM</span>
-            <span className="flow-chip">Funil</span>
-            <span className="flow-chip">Fechamento</span>
-          </div>
-        </article>
-
-        <article className="card hero-card">
-          <div>
-            <p className="eyebrow">{isDemo ? "Modo demonstração" : "Supabase conectado"}</p>
-            <h2>{isDemo ? "Configure o Supabase" : "Banco real ativado"}</h2>
-            <p className="description">
-              {isDemo
-                ? "O painel está usando dados de demonstração. Configure as variáveis do Supabase na Vercel para salvar e listar leads reais."
-                : "Leads, contatos, oportunidades, tarefas e mensagens agora são carregados do Supabase."}
-            </p>
-          </div>
-          <div className="actions">
-            <Link className="btn" href="/inbox">Abrir Inbox</Link>
-            <Link className="btn secondary" href="/configuracoes">Ver setup</Link>
-          </div>
-        </article>
+      <section className="dashboard-intro card">
+        <div>
+          <p className="eyebrow">Painel comercial</p>
+          <h1>Visão rápida da operação.</h1>
+          <p className="description">Acompanhe leads, tarefas e oportunidades sem ocupar a tela com informações repetidas.</p>
+        </div>
+        <div className="dashboard-intro-actions">
+          <span className={`system-status ${isDemo ? "demo" : "online"}`}>{isDemo ? "Modo demo" : "Supabase conectado"}</span>
+          <Link className="btn" href="/inbox">Abrir Inbox</Link>
+          <Link className="btn secondary" href="/configuracoes">Setup</Link>
+        </div>
       </section>
 
       <section className="grid cols-4" style={{ marginBottom: 14 }}>

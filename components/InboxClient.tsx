@@ -58,6 +58,7 @@ export function InboxClient({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [assistantNote, setAssistantNote] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<"acoes" | "proposta" | "assistente" | "historico">("acoes");
+  const [showInspector, setShowInspector] = useState(false);
   const [moving, setMoving] = useState<string | null>(null);
   const [updatingLead, setUpdatingLead] = useState(false);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
@@ -150,7 +151,13 @@ export function InboxClient({
     setActionMessage(null);
     setFollowUpAt(tomorrowBusinessTime());
     setActivePanel("acoes");
+    setShowInspector(false);
   }, [selected?.id]);
+
+  function openInspector(panel: "acoes" | "proposta" | "assistente" | "historico") {
+    setActivePanel(panel);
+    setShowInspector(true);
+  }
 
   async function moveSelectedDeal(stage: Stage) {
     if (!selected || !selectedDeal) {
@@ -474,7 +481,7 @@ export function InboxClient({
   }
 
   return (
-    <section className="card inbox inbox-fixed inbox-pro">
+    <section className={`card inbox inbox-fixed inbox-pro ${showInspector ? "inspector-open" : ""}`}>
       <aside className="thread-list thread-list-pro">
         <div className="thread-list-head">
           <div>
@@ -512,11 +519,21 @@ export function InboxClient({
             <h2>{selected?.name}</h2>
             <span className="muted">{selected?.phone} • {selected?.company || "sem empresa"}</span>
           </div>
-          <div className="chat-context-pill">
-            <span>{selectedStage?.title || (selectedDeal?.status === "perdido" ? "Perdido" : "Sem etapa")}</span>
-            <strong>{selectedDeal ? money(selectedDeal.value) : "R$ 0,00"}</strong>
+          <div className="chat-head-actions-pro">
+            <div className="chat-context-pill">
+              <span>{selectedStage?.title || (selectedDeal?.status === "perdido" ? "Perdido" : "Sem etapa")}</span>
+              <strong>{selectedDeal ? money(selectedDeal.value) : "R$ 0,00"}</strong>
+            </div>
+            <button className="btn mini secondary" onClick={() => setShowInspector(true)}>Ver detalhes</button>
           </div>
         </header>
+
+        <div className="chat-tool-strip" aria-label="Ações do atendimento">
+          <button className={activePanel === "acoes" && showInspector ? "active" : ""} onClick={() => openInspector("acoes")}>Ações</button>
+          <button className={activePanel === "proposta" && showInspector ? "active" : ""} onClick={() => openInspector("proposta")}>Proposta</button>
+          <button className={activePanel === "assistente" && showInspector ? "active" : ""} onClick={() => openInspector("assistente")}>IA</button>
+          <button className={activePanel === "historico" && showInspector ? "active" : ""} onClick={() => openInspector("historico")}>Histórico</button>
+        </div>
 
         <div className="messages messages-scroll messages-pro">
           {threadMessages.length === 0 && (
@@ -551,6 +568,14 @@ export function InboxClient({
       </div>
 
       <aside className="lead-inspector" aria-label="Painel do lead">
+        <div className="inspector-drawer-head">
+          <div>
+            <span className="eyebrow-small">Painel do lead</span>
+            <strong>{selected?.name}</strong>
+          </div>
+          <button className="btn mini secondary" onClick={() => setShowInspector(false)}>Fechar</button>
+        </div>
+
         <div className="inspector-card lead-status-card">
           <div className="inspector-headline">
             <span className="eyebrow-small">Dados comerciais</span>

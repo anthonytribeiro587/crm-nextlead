@@ -2042,3 +2042,192 @@ button:disabled {
   .messages-pro .message,
   .messages-pro .message.outbound { max-width: 90%; }
 }
+
+/* UX v5 — painel do lead recolhível, dashboard compacto e filtros mais claros */
+.dashboard-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 18px 20px;
+}
+.dashboard-intro h1 {
+  font-size: clamp(2rem, 3.2vw, 3.4rem);
+  margin: 4px 0 6px;
+  letter-spacing: -.06em;
+}
+.dashboard-intro .description {
+  max-width: 720px;
+  margin: 0;
+}
+.dashboard-intro-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.system-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 8px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(255,255,255,.035);
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 900;
+}
+.system-status.online {
+  color: #a7f3d0;
+  border-color: rgba(16,185,129,.24);
+  background: rgba(16,185,129,.08);
+}
+.system-status.demo {
+  color: #fde68a;
+  border-color: rgba(245,158,11,.24);
+  background: rgba(245,158,11,.08);
+}
+
+.inbox-pro {
+  position: relative;
+  grid-template-columns: 320px minmax(0, 1fr);
+  overflow: hidden;
+}
+.chat-head-actions-pro {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.chat-tool-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, .10);
+  background: rgba(5, 11, 24, .20);
+  overflow-x: auto;
+}
+.chat-tool-strip button {
+  min-height: 34px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 999px;
+  background: rgba(255,255,255,.035);
+  color: var(--muted);
+  padding: 7px 12px;
+  font-size: .77rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.chat-tool-strip button:hover,
+.chat-tool-strip button.active {
+  color: var(--text);
+  border-color: rgba(42,213,255,.34);
+  background: rgba(8,145,178,.14);
+}
+.lead-inspector {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 12;
+  width: min(390px, calc(100% - 42px));
+  max-width: 390px;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 22px;
+  box-shadow: 0 26px 70px rgba(0,0,0,.48);
+  transform: translateX(calc(100% + 24px));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .22s ease, opacity .22s ease;
+}
+.inbox-pro.inspector-open .lead-inspector {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.inspector-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 2px 4px;
+}
+.inspector-drawer-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.inspector-drawer-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .98rem;
+}
+.inspector-card {
+  background: rgba(8, 15, 29, .78);
+}
+.inspector-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-top: 2px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(15, 23, 42, .72));
+}
+.inspector-content-card {
+  min-height: 0;
+}
+.messages-pro .message {
+  font-size: .86rem;
+}
+.messages-pro .message.outbound {
+  max-width: min(560px, 68%);
+}
+.composer-pro .composer-input {
+  min-height: 50px;
+}
+.pipeline-toolbar {
+  grid-template-columns: minmax(260px, 1fr) 180px 140px auto;
+}
+.pipeline-toolbar .select {
+  color: var(--text);
+}
+.pipeline-command {
+  padding: 14px 16px;
+}
+.pipeline-command .muted {
+  font-size: .88rem;
+}
+
+@media (max-width: 1180px) {
+  .inbox-pro {
+    grid-template-columns: 290px minmax(0, 1fr);
+  }
+  .chat-context-pill { display: none; }
+}
+@media (max-width: 860px) {
+  .dashboard-intro {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .dashboard-intro-actions { justify-content: flex-start; }
+  .inbox-pro {
+    height: auto;
+    min-height: 0;
+    grid-template-columns: 1fr;
+  }
+  .thread-list-pro { min-height: 240px; border-right: 0; border-bottom: 1px solid rgba(148, 163, 184, .12); }
+  .lead-inspector {
+    position: fixed;
+    inset: 12px;
+    width: auto;
+    max-width: none;
+  }
+  .chat-head-pro { align-items: flex-start; flex-direction: column; }
+  .chat-head-actions-pro { justify-content: flex-start; }
+  .pipeline-toolbar { grid-template-columns: 1fr; }
+}

@@ -45,7 +45,19 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
   const contactsById = useMemo(() => new Map(contacts.map((contact) => [contact.id, contact])), [contacts]);
   const closedStageId = useMemo(() => stages.find((stage) => stage.title.toLowerCase().includes("fechado"))?.id || stages[stages.length - 1]?.id || "", [stages]);
   const firstStageId = stages[0]?.id || "";
-  const owners = useMemo(() => Array.from(new Set(contacts.map((contact) => contact.owner || "NextLead"))).sort(), [contacts]);
+  const owners = useMemo(() => {
+    const preferred = ["Anthony", "Felipe"];
+    const current = contacts
+      .map((contact) => contact.owner || "NextLead")
+      .filter(Boolean);
+
+    return Array.from(new Set([...preferred, ...current])).sort((a, b) => {
+      const ai = preferred.indexOf(a);
+      const bi = preferred.indexOf(b);
+      if (ai !== -1 || bi !== -1) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      return a.localeCompare(b);
+    });
+  }, [contacts]);
 
   const visibleDeals = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
