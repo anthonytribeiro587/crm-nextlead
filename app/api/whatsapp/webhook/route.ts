@@ -1,30 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { persistEvolutionWebhook } from "@/lib/evolution-webhook";
 
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status });
 }
 
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const mode = searchParams.get("hub.mode");
-  const token = searchParams.get("hub.verify_token");
-  const challenge = searchParams.get("hub.challenge");
-
-  if (mode === "subscribe" && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
-    return new NextResponse(challenge, { status: 200 });
-  }
-
-  return new NextResponse("Forbidden", { status: 403 });
+function isEvolutionPayload(payload: any) {
+  return Boolean(payload?.event || payload?.instance || payload?.data?.key || payload?.data?.message);
 }
 
-export async function POST(request: NextRequest) {
-  const payload = await request.json();
+function getProvidedSecret(request: NextRequest) {
+  return (
+    request.nextUrl.searchParams.get("secret") ||
+    request.headers.get("x-nextlead-webhook-secret") ||
+    request.headers.get("x-webhook-secret") ||
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ||
+    ""
+  );
+}
+
+async function persistMetaWebhook(payload: any) {
   const supabase = getSupabaseAdmin();
 
   if (!supabase) {
     console.info("Webhook recebido em modo demo. Configure Supabase para persistir:", JSON.stringify(payload));
-    return json({ received: true, persisted: false });
+    return { received: true, persisted: false };
   }
 
   await supabase.from("webhook_events").insert({ provider: "whatsapp", payload });
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest) {
 
         const profileName = contacts.find((contact: any) => contact?.wa_id === from)?.profile?.name;
         const body = message?.text?.body || `[${message?.type || "mensagem"}]`;
+        const createdAt = new Date(Number(message.timestamp || Date.now() / 1000) * 1000).toISOString();
 
         const { data: contact } = await supabase
           .from("contacts")
@@ -61,10 +63,11 @@ export async function POST(request: NextRequest) {
               phone: from,
               name: profileName || from,
               source: "WhatsApp",
-              last_message_at: new Date(Number(message.timestamp || Date.now() / 1000) * 1000).toISOString(),
+              owner: "NextLead",
+              last_message_at: createdAt,
               updated_at: new Date().toISOString(),
             },
-            { onConflict: "phone" }
+            { onConflict: "phone" },
           )
           .select("id")
           .single();
@@ -99,7 +102,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        await supabase.from("messages").insert({
+        await supabase.from("messages").upsert({
           contact_id: contact.id,
           direction: "inbound",
           body,
@@ -109,11 +112,41 @@ export async function POST(request: NextRequest) {
           provider_message_id: message?.id,
           provider_phone_number_id: phoneNumberId,
           raw_payload: message,
-          created_at: new Date(Number(message.timestamp || Date.now() / 1000) * 1000).toISOString(),
-        });
+          created_at: createdAt,
+        }, { onConflict: "provider_message_id" });
       }
     }
   }
 
-  return json({ received: true, persisted: true });
+  return { received: true, persisted: true };
+}
+
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const mode = searchParams.get("hub.mode");
+  const token = searchParams.get("hub.verify_token");
+  const challenge = searchParams.get("hub.challenge");
+
+  if (mode === "subscribe" && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+    return new NextResponse(challenge, { status: 200 });
+  }
+
+  return json({ ok: true, message: "Webhook NextLead ativo. Use POST para Evolution API ou validação GET para Meta." });
+}
+
+export async function POST(request: NextRequest) {
+  const payload = await request.json().catch(() => ({}));
+
+  if (isEvolutionPayload(payload)) {
+    const requiredSecret = process.env.WHATSAPP_WEBHOOK_SECRET;
+    if (requiredSecret && getProvidedSecret(request) !== requiredSecret) {
+      return json({ error: "Webhook secret inválido." }, 401);
+    }
+
+    const result = await persistEvolutionWebhook(payload);
+    return json({ received: true, provider: "evolution", ...result });
+  }
+
+  const result = await persistMetaWebhook(payload);
+  return json(result);
 }

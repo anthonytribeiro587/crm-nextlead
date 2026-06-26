@@ -12,10 +12,9 @@ export function InboxClient({ contacts: initialContacts, messages: initialMessag
   const [draft, setDraft] = useState("");
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
+
   const selected = contacts.find((contact) => contact.id === selectedId) || contacts[0];
   const threadMessages = useMemo(() => messages.filter((message) => message.contactId === selected?.id), [messages, selected?.id]);
-
-
 
   async function deleteConversation(contactId: string) {
     const contact = contacts.find((item) => item.id === contactId);
@@ -69,8 +68,8 @@ export function InboxClient({ contacts: initialContacts, messages: initialMessag
         current.map((message) =>
           message.id === optimistic.id
             ? { ...message, status: response.ok ? "sent" : "failed", providerMessageId: result.providerMessageId }
-            : message
-        )
+            : message,
+        ),
       );
     } catch {
       setMessages((current) => current.map((message) => (message.id === optimistic.id ? { ...message, status: "failed" } : message)));
@@ -82,7 +81,7 @@ export function InboxClient({ contacts: initialContacts, messages: initialMessag
       <section className="card inbox empty-inbox">
         <div className="empty-state">
           <strong>Nenhuma conversa ainda.</strong>
-          <p className="muted">Crie um lead no Dashboard para ele aparecer aqui. Depois, conecte a Meta para receber mensagens reais.</p>
+          <p className="muted">Quando alguém chamar no WhatsApp, a conversa vai aparecer aqui automaticamente.</p>
         </div>
       </section>
     );
@@ -93,8 +92,9 @@ export function InboxClient({ contacts: initialContacts, messages: initialMessag
       <aside className="thread-list">
         <div className="thread-list-head">
           <h2>Conversas</h2>
-          <span className="muted thread-count">{contacts.length}</span>
+          <span className="thread-count">{contacts.length}</span>
         </div>
+
         {contacts.map((contact) => (
           <button key={contact.id} className={`thread ${contact.id === selected?.id ? "active" : ""}`} onClick={() => setSelectedId(contact.id)}>
             <span className="avatar">{contact.name.slice(0, 1)}</span>
@@ -121,18 +121,30 @@ export function InboxClient({ contacts: initialContacts, messages: initialMessag
         </header>
 
         <div className="messages">
-          {threadMessages.length === 0 && <div className="message-empty"><p className="muted">Nenhuma mensagem ainda. Envie a primeira mensagem para testar o fluxo.</p></div>}
+          {threadMessages.length === 0 && (
+            <div className="message-empty">
+              <p className="muted">Nenhuma mensagem ainda. Envie a primeira mensagem para testar o fluxo.</p>
+            </div>
+          )}
           {threadMessages.map((message) => (
             <div key={message.id} className={`message ${message.direction === "outbound" ? "outbound" : ""}`}>
               {message.body}
               <br />
-              <small style={{ opacity: .72 }}>{shortDate(message.createdAt)} • {message.status}</small>
+              <small style={{ opacity: 0.72 }}>{shortDate(message.createdAt)} • {message.status}</small>
             </div>
           ))}
         </div>
 
         <footer className="composer">
-          <input className="input" placeholder="Digite uma mensagem..." value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") sendMessage(); }} />
+          <input
+            className="input"
+            placeholder="Digite uma mensagem..."
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") sendMessage();
+            }}
+          />
           <button className="btn" onClick={sendMessage}>Enviar</button>
         </footer>
       </div>

@@ -36,8 +36,8 @@ export function WhatsAppTestPanel({ defaultMessage }: { defaultMessage: string }
 
       setStatus("success");
       setFeedback(result?.demo
-        ? "Mensagem salva no CRM em modo demo. Configure a Meta para envio real."
-        : `Mensagem enviada pela Meta. ID: ${result?.providerMessageId || "sem id retornado"}`
+        ? "Mensagem salva no CRM em modo demo. Configure a Evolution API para envio real."
+        : `Mensagem enviada pela ${result?.provider === "evolution" ? "Evolution API" : "Meta"}. ID: ${result?.providerMessageId || "sem id retornado"}`
       );
     } catch (error: any) {
       setStatus("error");
