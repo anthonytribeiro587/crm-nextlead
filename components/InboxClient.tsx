@@ -34,6 +34,60 @@ function firstName(name?: string) {
   return clean ? clean.split(" ")[0] : "tudo bem";
 }
 
+
+type ProposalModel = "landing-start" | "landing-pro" | "crm-whatsapp" | "automation-ia";
+
+const proposalModels: Record<ProposalModel, { label: string; headline: string; scope: string[]; defaultDeadline: string }> = {
+  "landing-start": {
+    label: "Landing Page Start",
+    headline: "uma landing page objetiva para apresentar sua empresa e gerar contatos pelo WhatsApp",
+    defaultDeadline: "5 a 7 dias úteis após aprovação do conteúdo",
+    scope: [
+      "estrutura de página responsiva",
+      "copy comercial para apresentação do serviço",
+      "botão direto para WhatsApp",
+      "formulário simples de captação",
+      "publicação em link online",
+    ],
+  },
+  "landing-pro": {
+    label: "Landing Page Profissional",
+    headline: "uma landing page mais completa, com posicionamento premium e foco em conversão",
+    defaultDeadline: "7 a 12 dias úteis após aprovação do conteúdo",
+    scope: [
+      "design personalizado e responsivo",
+      "copy comercial por seções",
+      "formulário integrado ao CRM",
+      "botões de WhatsApp e chamadas estratégicas",
+      "ajustes finais para melhorar confiança e conversão",
+    ],
+  },
+  "crm-whatsapp": {
+    label: "CRM + WhatsApp",
+    headline: "um fluxo para receber leads, responder pelo WhatsApp e acompanhar oportunidades pelo funil",
+    defaultDeadline: "10 a 15 dias úteis após alinhamento do processo",
+    scope: [
+      "CRM online com contatos e histórico",
+      "Inbox conectado ao WhatsApp",
+      "funil comercial por etapas",
+      "follow-ups e próximas ações",
+      "painel de acompanhamento comercial",
+    ],
+  },
+  "automation-ia": {
+    label: "Automação / IA",
+    headline: "uma camada de automação para ganhar velocidade no atendimento e padronizar respostas",
+    defaultDeadline: "15 a 25 dias úteis conforme integrações necessárias",
+    scope: [
+      "mapeamento do processo de atendimento",
+      "respostas sugeridas e classificação de leads",
+      "automação de follow-ups",
+      "integração com CRM e WhatsApp",
+      "testes e ajustes de comportamento",
+    ],
+  },
+};
+
 export function InboxClient({
   contacts: initialContacts,
   messages: initialMessages,
@@ -67,6 +121,10 @@ export function InboxClient({
   const [savingDeal, setSavingDeal] = useState(false);
   const [followUpAt, setFollowUpAt] = useState(tomorrowBusinessTime);
   const [dealForm, setDealForm] = useState({ title: "", value: "", expectedClose: "" });
+  const [proposalModel, setProposalModel] = useState<ProposalModel>("landing-pro");
+  const [proposalDeadline, setProposalDeadline] = useState("7 a 12 dias úteis após aprovação do conteúdo");
+  const [proposalPayment, setProposalPayment] = useState("50% para iniciar e 50% na entrega");
+  const [lastGeneratedProposal, setLastGeneratedProposal] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
@@ -80,6 +138,7 @@ export function InboxClient({
       .map((title) => stages.find((stage) => stage.title.toLowerCase() === title.toLowerCase()))
       .filter(Boolean) as Stage[];
   }, [stages]);
+  const proposalStage = useMemo(() => stages.find((stage) => stage.title.toLowerCase().includes("proposta")), [stages]);
   const threadMessages = useMemo(() => {
     return messages
       .filter((message) => message.contactId === selected?.id)
@@ -150,6 +209,10 @@ export function InboxClient({
     setAssistantNote(null);
     setActionMessage(null);
     setFollowUpAt(tomorrowBusinessTime());
+    setProposalModel("landing-pro");
+    setProposalDeadline(proposalModels["landing-pro"].defaultDeadline);
+    setProposalPayment("50% para iniciar e 50% na entrega");
+    setLastGeneratedProposal(null);
     setActivePanel("acoes");
     setShowInspector(false);
   }, [selected?.id]);
@@ -157,6 +220,32 @@ export function InboxClient({
   function openInspector(panel: "acoes" | "proposta" | "assistente" | "historico") {
     setActivePanel(panel);
     setShowInspector(true);
+  }
+
+  async function logCommercialHistory(title: string, dueAt = new Date().toISOString()) {
+    if (!selected) return;
+    try {
+      const response = await fetch("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactId: selected.id, title, dueAt, done: true }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (response.ok && result.activity) {
+        setActivities((current) => [
+          ...current,
+          {
+            id: result.activity.id,
+            contactId: result.activity.contact_id || selected.id,
+            title: result.activity.title || title,
+            dueAt: result.activity.due_at || dueAt,
+            done: Boolean(result.activity.done),
+          },
+        ]);
+      }
+    } catch {
+      // Histórico é auxiliar: não bloqueia o fluxo principal.
+    }
   }
 
   async function moveSelectedDeal(stage: Stage) {
@@ -372,16 +461,37 @@ export function InboxClient({
     }
   }
 
-  function generateProposalDraft() {
+  async function generateProposalDraft() {
     if (!selected) return;
     const name = firstName(selected.name);
-    const dealTitle = selectedDeal?.title || "solução digital";
-    const valueText = selectedDeal?.value ? money(selectedDeal.value) : "valor a definir";
-    const deadlineText = selectedDeal?.expectedClose ? `com previsão para ${new Date(selectedDeal.expectedClose).toLocaleDateString("pt-BR")}` : "com prazo alinhado após confirmação";
+    const model = proposalModels[proposalModel];
+    const dealTitle = selectedDeal?.title || model.label;
+    const valueText = selectedDeal?.value ? money(selectedDeal.value) : "valor a definir após alinhamento final";
+    const deadlineText = proposalDeadline.trim() || model.defaultDeadline;
+    const paymentText = proposalPayment.trim() || "condições a combinar";
+    const scope = model.scope.map((item) => `• ${item}`).join("\n");
 
-    const text = `Perfeito, ${name}. Com base no que conversamos, minha sugestão é avançarmos com ${dealTitle}.\n\nA ideia é entregar uma estrutura profissional para captar contatos pelo WhatsApp, organizar os leads no CRM e acompanhar cada oportunidade pelo funil comercial.\n\nInvestimento estimado: ${valueText}.\nEntrega: ${deadlineText}.\n\nSe fizer sentido para você, posso te mandar o próximo passo para começarmos.`;
+    const text = `*Proposta NextLead — ${model.label}*
+
+Olá ${name}, tudo bem?
+
+Com base no que conversamos, minha sugestão é avançarmos com ${model.headline}.
+
+*Escopo previsto:*
+${scope}
+
+*Investimento:* ${valueText}
+*Prazo estimado:* ${deadlineText}
+*Condição:* ${paymentText}
+
+O objetivo é deixar sua empresa com uma presença mais profissional, facilitar o contato pelo WhatsApp e organizar melhor as oportunidades que chegarem.
+
+Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já organizo o início do projeto.`;
+
     setDraft(text);
-    setActionMessage("Proposta gerada no campo de mensagem. Revise antes de enviar.");
+    setLastGeneratedProposal(text);
+    setActionMessage("Proposta profissional gerada no campo de mensagem. Revise antes de enviar.");
+    await logCommercialHistory(`Proposta gerada: ${dealTitle}`);
   }
 
   function summarizeConversation() {
@@ -464,6 +574,17 @@ export function InboxClient({
             : message,
         ),
       );
+
+      if (response.ok && selectedDeal && proposalStage && (body === lastGeneratedProposal || body.includes("Proposta NextLead"))) {
+        await fetch("/api/pipeline/deals", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dealId: selectedDeal.id, stageId: proposalStage.id, status: "aberto", lostReason: null }),
+        }).catch(() => null);
+        setDeals((current) => current.map((deal) => (deal.id === selectedDeal.id ? { ...deal, stageId: proposalStage.id, status: "aberto", lostReason: undefined } : deal)));
+        await logCommercialHistory("Proposta enviada pelo WhatsApp");
+        setLastGeneratedProposal(null);
+      }
     } catch {
       setMessages((current) => current.map((message) => (message.id === optimistic.id ? { ...message, status: "failed" } : message)));
     }
@@ -679,18 +800,49 @@ export function InboxClient({
           )}
 
           {activePanel === "proposta" && (
-            <div className="inspector-section">
+            <div className="inspector-section proposal-builder">
               <div className="inspector-headline">
                 <span className="eyebrow-small">Proposta</span>
-                <strong>Gerar rascunho</strong>
+                <strong>Gerador comercial</strong>
               </div>
-              <p className="muted tool-hint">Cria um texto no campo de mensagem usando oportunidade, valor e prazo. Você revisa antes de enviar.</p>
-              <button className="btn mini" onClick={generateProposalDraft} disabled={!selected}>Gerar texto de proposta</button>
-              <div className="proposal-summary">
+              <p className="muted tool-hint">Monte um rascunho mais profissional, salve no histórico e revise antes de enviar.</p>
+
+              <label className="form-row">
+                Modelo
+                <select
+                  className="mini-select"
+                  value={proposalModel}
+                  onChange={(event) => {
+                    const model = event.target.value as ProposalModel;
+                    setProposalModel(model);
+                    setProposalDeadline(proposalModels[model].defaultDeadline);
+                  }}
+                >
+                  {Object.entries(proposalModels).map(([key, model]) => (
+                    <option key={key} value={key}>{model.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="form-row">
+                Prazo
+                <input className="input input-compact" value={proposalDeadline} onChange={(event) => setProposalDeadline(event.target.value)} />
+              </label>
+
+              <label className="form-row">
+                Condição
+                <input className="input input-compact" value={proposalPayment} onChange={(event) => setProposalPayment(event.target.value)} />
+              </label>
+
+              <button className="btn mini" onClick={generateProposalDraft} disabled={!selected}>Gerar proposta para WhatsApp</button>
+
+              <div className="proposal-summary proposal-summary-pro">
                 <span>Serviço</span>
-                <strong>{selectedDeal?.title || "Solução digital"}</strong>
+                <strong>{selectedDeal?.title || proposalModels[proposalModel].label}</strong>
                 <span>Valor</span>
                 <strong>{selectedDeal ? money(selectedDeal.value) : "A definir"}</strong>
+                <span>Ao enviar</span>
+                <strong>Move para Proposta enviada</strong>
               </div>
             </div>
           )}

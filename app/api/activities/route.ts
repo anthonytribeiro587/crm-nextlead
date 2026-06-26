@@ -38,29 +38,32 @@ export async function POST(request: NextRequest) {
 
   const title = cleanTitle(payload.title);
   const dueAt = cleanDueAt(payload.dueAt);
-  const { start, end } = dayRange(dueAt);
+  const done = Boolean(payload.done);
 
-  const { data: existing } = await supabase
-    .from("activities")
-    .select("id,contact_id,title,due_at,done")
-    .eq("contact_id", contactId)
-    .eq("title", title)
-    .eq("done", false)
-    .gte("due_at", start)
-    .lt("due_at", end)
-    .order("due_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  if (!done) {
+    const { start, end } = dayRange(dueAt);
+    const { data: existing } = await supabase
+      .from("activities")
+      .select("id,contact_id,title,due_at,done")
+      .eq("contact_id", contactId)
+      .eq("title", title)
+      .eq("done", false)
+      .gte("due_at", start)
+      .lt("due_at", end)
+      .order("due_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-  if (existing) {
-    return NextResponse.json({ ok: true, duplicate: true, activity: existing });
+    if (existing) {
+      return NextResponse.json({ ok: true, duplicate: true, activity: existing });
+    }
   }
 
   const record = {
     contact_id: contactId,
     title,
     due_at: dueAt,
-    done: false,
+    done,
   };
 
   const { data, error } = await supabase.from("activities").insert(record).select("id,contact_id,title,due_at,done").single();

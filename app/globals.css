@@ -2462,3 +2462,140 @@ button:disabled {
   .messages-pro .message,
   .messages-pro .message.outbound { max-width: 88%; }
 }
+
+/* NextLead CRM — pacote comercial 1-4: proposta, histórico, dashboard e funil operacional */
+.dashboard-exec-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  padding: 22px;
+}
+.dashboard-grid-pro {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, .92fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.dashboard-panel-pro {
+  min-height: 260px;
+}
+.dashboard-lower-pro {
+  align-items: stretch;
+}
+.compact-list-pro {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.compact-row-pro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, .12);
+  background: rgba(4, 10, 24, .42);
+  color: var(--text);
+  text-decoration: none;
+}
+.compact-row-pro:hover {
+  border-color: rgba(24, 196, 255, .32);
+  background: rgba(24, 196, 255, .07);
+}
+.compact-row-pro span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.compact-row-pro strong,
+.compact-row-pro small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compact-row-pro small,
+.compact-row-pro em {
+  color: var(--muted);
+  font-size: .82rem;
+  font-style: normal;
+}
+.mini-empty {
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  font-size: .9rem;
+}
+.dashboard-playbook {
+  min-height: 100%;
+}
+.playbook-steps {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+.playbook-steps span {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, .12);
+  background: rgba(255, 255, 255, .035);
+  color: var(--muted);
+}
+.proposal-builder .form-row {
+  margin-top: 10px;
+}
+.proposal-builder .mini-select,
+.proposal-builder .input-compact {
+  width: 100%;
+}
+.proposal-summary-pro {
+  margin-top: 12px;
+}
+.proposal-summary-pro strong:last-child {
+  color: #8ee6ff;
+}
+.pipeline-summary-grid {
+  min-width: 290px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 14px;
+  text-align: right;
+}
+.pipeline-summary-grid span {
+  color: var(--muted);
+  font-size: .78rem;
+}
+.pipeline-summary-grid b {
+  color: var(--text);
+}
+.pipeline-summary-grid strong {
+  grid-column: 1 / -1;
+  font-size: 1.2rem;
+}
+.pipeline-toolbar {
+  grid-template-columns: minmax(260px, 1fr) 170px 150px 160px auto;
+}
+.idle-chip {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: .68rem;
+  color: #f8d78b;
+  border: 1px solid rgba(245, 158, 11, .24);
+  background: rgba(245, 158, 11, .09);
+}
+.timeline-item strong {
+  text-transform: none;
+}
+@media (max-width: 1180px) {
+  .dashboard-grid-pro { grid-template-columns: 1fr; }
+  .pipeline-toolbar { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 780px) {
+  .dashboard-exec-hero { align-items: flex-start; flex-direction: column; }
+  .pipeline-toolbar { grid-template-columns: 1fr; }
+  .pipeline-summary-grid { text-align: left; min-width: 0; }
+}

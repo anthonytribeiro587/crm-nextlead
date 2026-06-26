@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { completeInitialContactActivities } from "@/lib/activities";
+import { logCommercialActivity } from "@/lib/commercial-events";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -52,15 +53,29 @@ export async function PATCH(request: NextRequest) {
     .from("deals")
     .update(update)
     .eq("id", dealId)
-    .select("id,contact_id")
+    .select("id,contact_id,title,value,status,stage_id")
     .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if ((stageId || status) && deal?.contact_id) {
-    await completeInitialContactActivities(supabase, deal.contact_id);
+  if (deal?.contact_id) {
+    if (stageId || status) {
+      await completeInitialContactActivities(supabase, deal.contact_id);
+    }
+
+    let eventTitle = "Oportunidade atualizada";
+    if (status === "perdido") eventTitle = lostReason ? `Oportunidade perdida: ${String(lostReason).slice(0, 80)}` : "Oportunidade marcada como perdida";
+    else if (status === "ganho") eventTitle = "Oportunidade marcada como fechada";
+    else if (stageId) {
+      const { data: stage } = await supabase.from("pipeline_stages").select("title").eq("id", stageId).maybeSingle();
+      eventTitle = `Etapa alterada para ${stage?.title || "nova etapa"}`;
+    } else if (title !== undefined || value !== undefined || expectedClose !== undefined) {
+      eventTitle = "Oportunidade editada";
+    }
+
+    await logCommercialActivity(supabase, { contactId: deal.contact_id, title: eventTitle, done: true });
   }
 
   return NextResponse.json({ ok: true });

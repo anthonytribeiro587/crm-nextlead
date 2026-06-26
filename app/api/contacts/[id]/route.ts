@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { normalizeBrazilWhatsAppPhone } from "@/lib/format";
+import { logCommercialActivity } from "@/lib/commercial-events";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -56,6 +57,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ ok: true, demo: true });
   }
 
+  const { data: previousContact } = await supabase
+    .from("contacts")
+    .select("temperature,owner,name,company")
+    .eq("id", contactId)
+    .maybeSingle();
+
   let result: any = await supabase
     .from("contacts")
     .update(update)
@@ -76,6 +83,18 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   if (result.error) {
     return NextResponse.json({ error: result.error.message }, { status: 500 });
+  }
+
+  if (payload.temperature !== undefined && previousContact?.temperature !== result.data?.temperature) {
+    await logCommercialActivity(supabase, { contactId, title: `Temperatura alterada para ${result.data?.temperature}`, done: true });
+  }
+
+  if (payload.owner !== undefined && previousContact?.owner !== result.data?.owner) {
+    await logCommercialActivity(supabase, { contactId, title: `Responsável alterado para ${result.data?.owner || "NextLead"}`, done: true });
+  }
+
+  if ((payload.name !== undefined || payload.company !== undefined || payload.notes !== undefined) && previousContact) {
+    await logCommercialActivity(supabase, { contactId, title: "Dados do lead atualizados", done: true });
   }
 
   return NextResponse.json({ ok: true, contact: result.data });

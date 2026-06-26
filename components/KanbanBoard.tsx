@@ -29,6 +29,13 @@ function tempClass(value?: LeadTemperature) {
   return "warm";
 }
 
+function daysSince(value?: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
 export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, stages }: { contacts: Contact[]; deals: Deal[]; stages: Stage[] }) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
@@ -39,6 +46,7 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
   const [query, setQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("todos");
   const [temperatureFilter, setTemperatureFilter] = useState<"todos" | LeadTemperature>("todos");
+  const [ageFilter, setAgeFilter] = useState("todos");
   const [showLost, setShowLost] = useState(false);
   const router = useRouter();
 
@@ -67,6 +75,10 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
       if (!showLost && deal.status === "perdido") return false;
       if (ownerFilter !== "todos" && (contact?.owner || "NextLead") !== ownerFilter) return false;
       if (temperatureFilter !== "todos" && (contact?.temperature || "morno") !== temperatureFilter) return false;
+      const waitingDays = daysSince(contact?.lastMessageAt) || 0;
+      if (ageFilter === "7d" && waitingDays < 7) return false;
+      if (ageFilter === "14d" && waitingDays < 14) return false;
+      if (ageFilter === "sem-previsao" && deal.expectedClose) return false;
       if (!normalizedQuery) return true;
 
       const haystack = [deal.title, contact?.name, contact?.company, contact?.phone, contact?.source]
@@ -75,9 +87,12 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
         .toLowerCase();
       return haystack.includes(normalizedQuery);
     });
-  }, [contactsById, deals, ownerFilter, query, showLost, temperatureFilter]);
+  }, [ageFilter, contactsById, deals, ownerFilter, query, showLost, temperatureFilter]);
 
   const pipelineValue = visibleDeals.filter((deal) => deal.status === "aberto").reduce((sum, deal) => sum + deal.value, 0);
+  const staleDeals = visibleDeals.filter((deal) => (daysSince(contactsById.get(deal.contactId)?.lastMessageAt) || 0) >= 7).length;
+  const proposalDeals = visibleDeals.filter((deal) => stages.find((stage) => stage.id === deal.stageId)?.title.toLowerCase().includes("proposta")).length;
+  const wonDeals = deals.filter((deal) => deal.status === "ganho").length;
 
   async function patchDeal(dealId: string, payload: Record<string, unknown>) {
     const response = await fetch("/api/pipeline/deals", {
@@ -199,8 +214,11 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
           <h2>Funil organizado</h2>
           <p className="muted">Filtre, mova oportunidades e abra o atendimento sem sair do pipeline.</p>
         </div>
-        <div className="pipeline-summary-mini">
-          <span>{visibleDeals.length} oportunidades</span>
+        <div className="pipeline-summary-mini pipeline-summary-grid">
+          <span><b>{visibleDeals.length}</b> oportunidades</span>
+          <span><b>{staleDeals}</b> paradas +7d</span>
+          <span><b>{proposalDeals}</b> propostas</span>
+          <span><b>{wonDeals}</b> fechadas</span>
           <strong>{money(pipelineValue)}</strong>
         </div>
       </div>
@@ -213,6 +231,12 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
         </select>
         <select className="select" value={temperatureFilter} onChange={(event) => setTemperatureFilter(event.target.value as "todos" | LeadTemperature)}>
           {temperatureOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <select className="select" value={ageFilter} onChange={(event) => setAgeFilter(event.target.value)}>
+          <option value="todos">Todos prazos</option>
+          <option value="7d">Parados +7 dias</option>
+          <option value="14d">Parados +14 dias</option>
+          <option value="sem-previsao">Sem previsão</option>
         </select>
         <button type="button" className={`btn secondary ${showLost ? "active-filter" : ""}`} onClick={() => setShowLost((current) => !current)}>
           {showLost ? "Ocultar perdidos" : "Mostrar perdidos"}
@@ -272,6 +296,10 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
                         <span>{money(deal.value)}</span>
                         <span>{deal.expectedClose ? `Prev. ${deal.expectedClose.split("-").reverse().join("/")}` : "sem previsão"}</span>
                       </div>
+                      {(() => {
+                        const idleDays = daysSince(contact?.lastMessageAt);
+                        return idleDays !== null && idleDays >= 3 ? <span className="idle-chip">sem contato há {idleDays}d</span> : null;
+                      })()}
                       <div className="deal-actions deal-actions-pro">
                         <Link className="btn mini secondary" href={`/inbox?contact=${deal.contactId}`}>Abrir</Link>
                         <button type="button" className="btn mini secondary" onClick={() => openEditor(deal)}>Editar</button>
