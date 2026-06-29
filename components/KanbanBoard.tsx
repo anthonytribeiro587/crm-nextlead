@@ -113,7 +113,10 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
       ),
     );
     patchDeal(dealId, { stageId, status: "aberto", lostReason: null })
-      .then(() => setMessage("Etapa atualizada."))
+      .then(() => {
+        setMessage("Etapa atualizada.");
+        router.refresh();
+      })
       .catch(() => setMessage("Não consegui salvar a mudança de etapa."));
   }
 
@@ -174,14 +177,19 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
 
   async function markAsWon(deal: Deal) {
     setDeals((current) => current.map((item) => (item.id === deal.id ? { ...item, status: "ganho", stageId: closedStageId } : item)));
-    patchDeal(deal.id, { status: "ganho", stageId: closedStageId }).catch(() => setMessage("Não consegui marcar como fechado."));
+    patchDeal(deal.id, { status: "ganho", stageId: closedStageId })
+      .then(() => router.refresh())
+      .catch(() => setMessage("Não consegui marcar como fechado."));
   }
 
   async function reopenDeal(deal: Deal) {
     const targetStageId = deal.stageId || firstStageId;
     setDeals((current) => current.map((item) => (item.id === deal.id ? { ...item, status: "aberto", stageId: targetStageId, lostReason: undefined } : item)));
     patchDeal(deal.id, { status: "aberto", stageId: targetStageId, lostReason: null })
-      .then(() => setMessage("Oportunidade reaberta."))
+      .then(() => {
+        setMessage("Oportunidade reaberta.");
+        router.refresh();
+      })
       .catch(() => setMessage("Não consegui reabrir a oportunidade."));
   }
 
