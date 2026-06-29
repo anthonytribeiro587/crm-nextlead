@@ -3450,3 +3450,193 @@ button:disabled {
   }
   .nav-link { font-size: .62rem !important; }
 }
+
+/* NextLead CRM — mobile scroll safe fix v9
+   Objetivo: no celular, a página inteira precisa rolar normalmente.
+   O chat deixa de ter altura travada; mensagens fluem na página e o composer fica acessível. */
+@media (max-width: 860px) {
+  html,
+  body {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-shell {
+    display: block !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .main {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 16px 10px calc(108px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .inbox-pro {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .thread-list-pro {
+    flex: none !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: hidden !important;
+  }
+
+  .thread-stack {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding-bottom: 10px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-pro {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    border-radius: 0 0 22px 22px !important;
+  }
+
+  .chat-head-pro {
+    position: relative !important;
+    top: auto !important;
+    z-index: 2 !important;
+  }
+
+  .messages-pro {
+    flex: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 260px !important;
+    overflow: visible !important;
+    padding: 12px 12px 18px !important;
+    gap: 10px !important;
+  }
+
+  .messages-pro .message,
+  .messages-pro .message.outbound {
+    max-width: 92% !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .composer-pro {
+    position: sticky !important;
+    bottom: calc(78px + env(safe-area-inset-bottom)) !important;
+    z-index: 70 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 76px !important;
+    align-items: end !important;
+    margin: 0 10px 10px !important;
+    padding: 10px !important;
+    border: 1px solid rgba(148, 163, 184, .16) !important;
+    border-radius: 20px !important;
+    background: rgba(7, 13, 29, .96) !important;
+    box-shadow: 0 -14px 48px rgba(0, 0, 0, .38) !important;
+    backdrop-filter: blur(16px) !important;
+  }
+
+  .composer-pro .composer-input {
+    max-height: 120px !important;
+    overflow-y: auto !important;
+  }
+
+  .nav {
+    z-index: 140 !important;
+  }
+
+  .inspector-backdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 150 !important;
+    overflow: hidden !important;
+  }
+
+  .lead-inspector {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100dvw !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    padding: 14px 12px calc(16px + env(safe-area-inset-bottom)) !important;
+    border-radius: 0 !important;
+  }
+
+  .inspector-drawer-head {
+    flex: none !important;
+  }
+
+  .inspector-scroll-area {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 0 4px calc(190px + env(safe-area-inset-bottom)) 0 !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .inspector-content-card,
+  .proposal-builder,
+  .timeline-list-pro,
+  .inspector-section {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  .proposal-builder {
+    padding-bottom: calc(170px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .timeline-list-pro {
+    padding-bottom: calc(190px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .proposal-builder > *:last-child,
+  .timeline-list-pro > *:last-child {
+    margin-bottom: calc(90px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .main {
+    padding-inline: 8px !important;
+  }
+
+  .chat-pro {
+    min-height: 0 !important;
+  }
+
+  .messages-pro {
+    min-height: 240px !important;
+  }
+
+  .composer-pro {
+    grid-template-columns: minmax(0, 1fr) 70px !important;
+    margin-inline: 6px !important;
+  }
+}
