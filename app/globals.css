@@ -2856,3 +2856,181 @@ button:disabled {
   .chat-head-actions-pro { justify-content: flex-start !important; }
   .header-stage-field { width: 100%; }
 }
+
+/* NextLead CRM — hotfix v8: drawer bottom safe + mobile base */
+.lead-inspector {
+  overflow: hidden !important;
+}
+
+.inspector-scroll-area {
+  display: block !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 0 6px 156px 0 !important;
+  overscroll-behavior: contain;
+}
+
+.inspector-card,
+.inspector-tabs,
+.inspector-content-card {
+  flex: none !important;
+}
+
+.inspector-content-card {
+  margin-bottom: 92px !important;
+  overflow: visible !important;
+}
+
+.proposal-builder,
+.timeline-list-pro,
+.inspector-section {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+.proposal-builder .btn:last-child,
+.proposal-builder > .btn,
+.proposal-summary-pro {
+  margin-bottom: 34px !important;
+}
+
+.timeline-list-pro {
+  padding-bottom: 92px !important;
+}
+
+.pipeline-command {
+  min-height: 116px !important;
+}
+
+.pipeline-summary-inline {
+  align-self: center;
+  justify-content: flex-end;
+  gap: 7px !important;
+}
+
+.pipeline-summary-inline span,
+.pipeline-summary-inline b {
+  opacity: .88;
+}
+
+.pipeline-summary-inline span {
+  padding: 6px 9px !important;
+  background: rgba(15, 23, 42, .22) !important;
+}
+
+.pipeline-summary-inline b {
+  padding: 7px 11px !important;
+}
+
+@media (max-width: 860px) {
+  .main {
+    padding: 14px !important;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 10vw, 2.65rem) !important;
+    line-height: .95 !important;
+  }
+
+  .topbar {
+    gap: 12px !important;
+  }
+
+  .inbox-pro {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .thread-list-pro {
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(148, 163, 184, .12) !important;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .thread-stack {
+    display: grid;
+    gap: 8px;
+  }
+
+  .chat-pro {
+    min-height: calc(100dvh - 410px) !important;
+    height: calc(100dvh - 410px) !important;
+  }
+
+  .chat-head-pro {
+    padding: 12px !important;
+    gap: 10px !important;
+  }
+
+  .chat-head-actions-pro {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .chat-context-pill,
+  .header-stage-field,
+  .chat-head-actions-pro .btn {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .messages-pro {
+    padding: 12px !important;
+  }
+
+  .messages-pro .message,
+  .messages-pro .message.outbound {
+    max-width: 92% !important;
+    font-size: .82rem !important;
+  }
+
+  .composer-pro {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  .composer-pro .composer-input {
+    min-height: 44px !important;
+    font-size: .85rem !important;
+  }
+
+  .lead-inspector {
+    width: 100vw !important;
+    max-width: none !important;
+    padding: 14px !important;
+  }
+
+  .inspector-scroll-area {
+    padding-bottom: 170px !important;
+  }
+
+  .pipeline-command {
+    min-height: auto !important;
+    display: grid !important;
+    gap: 14px !important;
+  }
+
+  .pipeline-summary-inline {
+    justify-content: flex-start !important;
+  }
+
+  .pipeline-toolbar {
+    grid-template-columns: 1fr !important;
+  }
+
+  .pipeline-pro {
+    grid-template-columns: none !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: minmax(270px, 84vw) !important;
+    overflow-x: auto !important;
+    padding-bottom: 12px !important;
+  }
+}
