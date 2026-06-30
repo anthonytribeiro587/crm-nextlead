@@ -8,7 +8,7 @@ import { money, shortDate } from "@/lib/format";
 
 const statusLabels: Record<ServiceOrderStatus, string> = {
   aberta: "Aberta",
-  diagnostico: "Em diagnóstico",
+  diagnostico: "Diagnóstico",
   aguardando_aprovacao: "Aguardando aprovação",
   aprovada: "Aprovada",
   execucao: "Em execução",
@@ -20,11 +20,13 @@ const statusLabels: Record<ServiceOrderStatus, string> = {
 
 const statusOrder: ServiceOrderStatus[] = ["aberta", "diagnostico", "aguardando_aprovacao", "aprovada", "execucao", "aguardando_material", "concluida", "entregue", "cancelada"];
 
-const priorityLabels = {
+const priorityLabels: Record<LeadTemperature, string> = {
   frio: "baixa",
   morno: "média",
   quente: "alta",
 };
+
+const closedStatuses: ServiceOrderStatus[] = ["concluida", "entregue", "cancelada"];
 
 function dateTimeLocal(value?: string) {
   if (!value) return "";
@@ -50,6 +52,18 @@ function emptyOrderForm() {
   };
 }
 
+function isLate(order: ServiceOrder) {
+  return Boolean(order.dueAt && new Date(order.dueAt).getTime() < Date.now() && !closedStatuses.includes(order.status));
+}
+
+function orderStatusClass(order: ServiceOrder) {
+  if (order.status === "cancelada") return "danger";
+  if (closedStatuses.includes(order.status)) return "success";
+  if (isLate(order)) return "warning";
+  if (["execucao", "aguardando_material"].includes(order.status)) return "accent";
+  return "neutral";
+}
+
 export function ServiceOrdersClient({
   serviceOrders: initialOrders,
   contacts,
@@ -69,6 +83,7 @@ export function ServiceOrdersClient({
   const [ownerFilter, setOwnerFilter] = useState("todos");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(initialOrders[0]?.id || null);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(serviceOrdersError || null);
   const [form, setForm] = useState(emptyOrderForm);
@@ -80,36 +95,42 @@ export function ServiceOrdersClient({
 
   const filtered = useMemo(() => {
     const text = query.toLowerCase().trim();
-    return orders.filter((order) => {
-      const contact = contactById.get(order.contactId);
-      const deal = order.dealId ? dealById.get(order.dealId) : undefined;
-      const matchText = !text || [order.code, order.title, order.description, order.owner, order.internalNotes, contact?.name, contact?.phone, contact?.company, deal?.title]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(text);
-      const matchStatus = statusFilter === "todas" || order.status === statusFilter;
-      const matchOwner = ownerFilter === "todos" || order.owner === ownerFilter;
-      return matchText && matchStatus && matchOwner;
-    });
+    return orders
+      .filter((order) => {
+        const contact = contactById.get(order.contactId);
+        const deal = order.dealId ? dealById.get(order.dealId) : undefined;
+        const matchText = !text || [order.code, order.title, order.description, order.owner, order.internalNotes, contact?.name, contact?.phone, contact?.company, deal?.title]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(text);
+        const matchStatus = statusFilter === "todas" || order.status === statusFilter;
+        const matchOwner = ownerFilter === "todos" || order.owner === ownerFilter;
+        return matchText && matchStatus && matchOwner;
+      })
+      .sort((a, b) => {
+        if (isLate(a) !== isLate(b)) return isLate(a) ? -1 : 1;
+        const aClosed = closedStatuses.includes(a.status);
+        const bClosed = closedStatuses.includes(b.status);
+        if (aClosed !== bClosed) return aClosed ? 1 : -1;
+        return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
+      });
   }, [contactById, dealById, orders, ownerFilter, query, statusFilter]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<ServiceOrderStatus, ServiceOrder[]>();
-    statusOrder.forEach((status) => map.set(status, []));
-    filtered.forEach((order) => map.get(order.status)?.push(order));
-    return map;
-  }, [filtered]);
-
-  const openOrders = orders.filter((order) => !["concluida", "entregue", "cancelada"].includes(order.status));
-  const lateOrders = openOrders.filter((order) => order.dueAt && new Date(order.dueAt).getTime() < Date.now()).length;
+  const openOrders = orders.filter((order) => !closedStatuses.includes(order.status));
+  const lateOrders = openOrders.filter(isLate).length;
   const executionOrders = orders.filter((order) => ["execucao", "aguardando_material"].includes(order.status)).length;
-  const totalEstimated = openOrders.reduce((sum, order) => sum + order.estimatedValue, 0);
+  const approvalOrders = orders.filter((order) => ["aguardando_aprovacao", "aprovada"].includes(order.status)).length;
+  const totalEstimated = openOrders.reduce((sum, order) => sum + (order.finalValue || order.estimatedValue), 0);
+
+  const selectedOrder = selectedOrderId ? orders.find((order) => order.id === selectedOrderId) : null;
+  const selectedContact = selectedOrder ? contactById.get(selectedOrder.contactId) : null;
 
   function startCreate(contactId?: string) {
     const contact = contactId ? contactById.get(contactId) : undefined;
     const deal = contact ? deals.find((item) => item.contactId === contact.id && item.status !== "perdido") : undefined;
     setEditingId(null);
+    setSelectedOrderId(null);
     setForm({
       ...emptyOrderForm(),
       contactId: contact?.id || contacts[0]?.id || "",
@@ -124,6 +145,7 @@ export function ServiceOrdersClient({
   }
 
   function startEdit(order: ServiceOrder) {
+    setSelectedOrderId(order.id);
     setEditingId(order.id);
     setForm({
       contactId: order.contactId,
@@ -139,6 +161,12 @@ export function ServiceOrdersClient({
       internalNotes: order.internalNotes || "",
     });
     setShowForm(true);
+    setFeedback(null);
+  }
+
+  function closePanel() {
+    setShowForm(false);
+    setEditingId(null);
     setFeedback(null);
   }
 
@@ -183,6 +211,8 @@ export function ServiceOrdersClient({
           updatedAt: result.serviceOrder.updated_at,
         };
         setOrders((current) => (editingId ? current.map((order) => (order.id === saved.id ? saved : order)) : [saved, ...current]));
+        setSelectedOrderId(saved.id);
+        setEditingId(saved.id);
       }
       setShowForm(false);
       setFeedback(editingId ? "Ordem de serviço atualizada." : "Ordem de serviço criada.");
@@ -205,6 +235,7 @@ export function ServiceOrdersClient({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.detail || result.error || "Erro ao atualizar status.");
       setOrders((current) => current.map((item) => (item.id === order.id ? { ...item, status, updatedAt: new Date().toISOString() } : item)));
+      if (editingId === order.id) setForm((current) => ({ ...current, status }));
       router.refresh();
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Erro ao atualizar status.");
@@ -221,21 +252,22 @@ export function ServiceOrdersClient({
       )}
       {feedback && <div className="inline-alert">{feedback}</div>}
 
-      <section className="os-command card">
+      <section className="os-command os-command-compact card">
         <div>
           <p className="eyebrow-small">Operação</p>
-          <h2>Ordens em andamento</h2>
-          <p className="muted">Controle execução, responsável, prazo e retorno para o cliente depois da venda.</p>
+          <h2>Lista de ordens</h2>
+          <p className="muted">Veja rapidamente cliente, serviço, status, responsável e prazo. Clique em uma OS para editar.</p>
         </div>
-        <div className="os-metrics-row">
+        <div className="os-kpi-strip">
           <span><strong>{openOrders.length}</strong> abertas</span>
           <span><strong>{executionOrders}</strong> em execução</span>
-          <span><strong>{lateOrders}</strong> atrasadas</span>
+          <span><strong>{approvalOrders}</strong> aprovação</span>
+          <span className={lateOrders > 0 ? "danger-text" : ""}><strong>{lateOrders}</strong> atrasadas</span>
           <span><strong>{money(totalEstimated)}</strong></span>
         </div>
       </section>
 
-      <section className="card os-toolbar">
+      <section className="card os-toolbar os-toolbar-list">
         <input className="input" placeholder="Buscar OS, cliente, serviço..." value={query} onChange={(event) => setQuery(event.target.value)} />
         <select className="input" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ServiceOrderStatus | "todas")}>
           <option value="todas">Todos status</option>
@@ -248,107 +280,164 @@ export function ServiceOrdersClient({
         <button className="btn" type="button" onClick={() => startCreate()}>Nova OS</button>
       </section>
 
-      {showForm && (
-        <section className="card os-form-card">
-          <div className="section-headline">
+      <section className="os-list-layout">
+        <article className="card os-list-card">
+          <div className="os-list-title">
             <div>
-              <p className="eyebrow-small">{editingId ? "Editar OS" : "Nova OS"}</p>
-              <h2>{editingId ? "Atualizar ordem de serviço" : "Criar ordem de serviço"}</h2>
+              <h2>Ordens de serviço</h2>
+              <p className="muted">{filtered.length} resultado(s) no filtro atual.</p>
             </div>
-            <button className="btn mini secondary" onClick={() => setShowForm(false)}>Fechar</button>
+            <span className="badge cold">lista operacional</span>
           </div>
-          <div className="os-form-grid">
-            <label>Cliente
-              <select className="input" value={form.contactId} onChange={(event) => setForm((current) => ({ ...current, contactId: event.target.value }))}>
-                <option value="">Selecione</option>
-                {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name} · {contact.company || contact.phone}</option>)}
-              </select>
-            </label>
-            <label>Oportunidade
-              <select className="input" value={form.dealId} onChange={(event) => setForm((current) => ({ ...current, dealId: event.target.value }))}>
-                <option value="">Sem vínculo</option>
-                {deals.filter((deal) => !form.contactId || deal.contactId === form.contactId).map((deal) => <option key={deal.id} value={deal.id}>{deal.title} · {money(deal.value)}</option>)}
-              </select>
-            </label>
-            <label>Título
-              <input className="input" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
-            </label>
-            <label>Status
-              <select className="input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as ServiceOrderStatus }))}>
-                {statusOrder.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
-              </select>
-            </label>
-            <label>Prioridade
-              <select className="input" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value as LeadTemperature }))}>
-                <option value="frio">Baixa</option>
-                <option value="morno">Média</option>
-                <option value="quente">Alta</option>
-              </select>
-            </label>
-            <label>Responsável
-              <input className="input" value={form.owner} onChange={(event) => setForm((current) => ({ ...current, owner: event.target.value }))} />
-            </label>
-            <label>Valor estimado
-              <input className="input" value={form.estimatedValue} onChange={(event) => setForm((current) => ({ ...current, estimatedValue: event.target.value }))} />
-            </label>
-            <label>Valor final
-              <input className="input" value={form.finalValue} onChange={(event) => setForm((current) => ({ ...current, finalValue: event.target.value }))} />
-            </label>
-            <label>Previsão
-              <input className="input" type="datetime-local" value={form.dueAt} onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))} />
-            </label>
-            <label className="span-2">Descrição do serviço
-              <textarea className="input" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="O que precisa ser feito?" />
-            </label>
-            <label className="span-2">Observações internas
-              <textarea className="input" value={form.internalNotes} onChange={(event) => setForm((current) => ({ ...current, internalNotes: event.target.value }))} placeholder="Informações para a equipe, materiais, combinados..." />
-            </label>
-          </div>
-          <button className="btn" type="button" disabled={saving} onClick={saveOrder}>{saving ? "Salvando..." : editingId ? "Salvar OS" : "Criar OS"}</button>
-        </section>
-      )}
 
-      <section className="os-board">
-        {statusOrder.map((status) => {
-          const items = grouped.get(status) || [];
-          return (
-            <article className="os-column" key={status}>
-              <div className="os-column-head">
-                <strong>{statusLabels[status]}</strong>
-                <span>{items.length}</span>
+          {filtered.length === 0 ? (
+            <div className="empty-state os-empty-list">
+              <strong>Nenhuma OS encontrada.</strong>
+              <p className="muted">Crie uma nova OS ou ajuste os filtros para visualizar demandas em andamento.</p>
+            </div>
+          ) : (
+            <div className="os-table-list">
+              {filtered.map((order) => {
+                const contact = contactById.get(order.contactId);
+                const deal = order.dealId ? dealById.get(order.dealId) : undefined;
+                const amount = order.finalValue || order.estimatedValue;
+                return (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className={`os-list-row ${selectedOrderId === order.id ? "active" : ""} ${isLate(order) ? "late" : ""}`}
+                    key={order.id}
+                    onClick={() => startEdit(order)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") startEdit(order); }}
+                  >
+                    <span className="os-list-main">
+                      <span className="os-code-line">
+                        <strong>{order.code}</strong>
+                        <em className={`os-status-pill ${orderStatusClass(order)}`}>{isLate(order) ? "Atrasada" : statusLabels[order.status]}</em>
+                      </span>
+                      <span className="os-title-line">{order.title}</span>
+                      <span className="os-client-line">{contact?.name || "Contato"} · {contact?.company || contact?.phone || "sem empresa"}</span>
+                    </span>
+                    <span className="os-list-meta desktop-only-soft">
+                      <small>Responsável</small>
+                      <strong>{order.owner}</strong>
+                    </span>
+                    <span className="os-list-meta desktop-only-soft">
+                      <small>Prazo</small>
+                      <strong>{order.dueAt ? shortDate(order.dueAt) : "sem prazo"}</strong>
+                    </span>
+                    <span className="os-list-meta desktop-only-soft">
+                      <small>Valor</small>
+                      <strong>{money(amount)}</strong>
+                    </span>
+                    <span className="os-row-actions" onClick={(event) => event.stopPropagation()}>
+                      <Link className="btn mini secondary" href={`/inbox?contact=${order.contactId}`}>Inbox</Link>
+                      <select className="input mini-select" value={order.status} onChange={(event) => updateStatus(order, event.target.value as ServiceOrderStatus)}>
+                        {statusOrder.map((nextStatus) => <option key={nextStatus} value={nextStatus}>{statusLabels[nextStatus]}</option>)}
+                      </select>
+                    </span>
+                    {deal && <span className="os-linked-deal">{deal.title}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </article>
+
+        <aside className={`card os-detail-panel ${showForm ? "open" : ""}`}>
+          {showForm ? (
+            <>
+              <div className="os-panel-head">
+                <div>
+                  <p className="eyebrow-small">{editingId ? "Editar OS" : "Nova OS"}</p>
+                  <h2>{editingId ? "Detalhes da ordem" : "Criar ordem"}</h2>
+                </div>
+                <button className="btn mini secondary" onClick={closePanel}>Fechar</button>
               </div>
-              {items.length === 0 ? (
-                <div className="empty-state mini-empty">Sem OS aqui.</div>
-              ) : (
-                items.map((order) => {
-                  const contact = contactById.get(order.contactId);
-                  return (
-                    <div className="os-card" key={order.id}>
-                      <div className="os-card-topline">
-                        <span className="badge cold">{order.code}</span>
-                        <span className={`badge ${order.priority === "quente" ? "hot" : order.priority === "morno" ? "warm" : "cold"}`}>{priorityLabels[order.priority]}</span>
-                      </div>
-                      <strong>{order.title}</strong>
-                      <p className="muted">{contact?.name || "Contato"} · {contact?.company || contact?.phone || "sem empresa"}</p>
-                      {order.description && <p className="os-card-desc">{order.description}</p>}
-                      <div className="deal-meta">
-                        <span>{money(order.finalValue || order.estimatedValue)}</span>
-                        <span>{order.dueAt ? `Prev. ${shortDate(order.dueAt)}` : "sem prazo"}</span>
-                      </div>
-                      <div className="os-actions">
-                        <Link className="btn mini secondary" href={`/inbox?contact=${order.contactId}`}>Inbox</Link>
-                        <button className="btn mini secondary" type="button" onClick={() => startEdit(order)}>Editar</button>
-                        <select className="input mini-select" value={order.status} onChange={(event) => updateStatus(order, event.target.value as ServiceOrderStatus)}>
-                          {statusOrder.map((nextStatus) => <option key={nextStatus} value={nextStatus}>{statusLabels[nextStatus]}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </article>
-          );
-        })}
+
+              <div className="os-form-grid os-form-grid-panel">
+                <label>Cliente
+                  <select className="input" value={form.contactId} onChange={(event) => setForm((current) => ({ ...current, contactId: event.target.value, dealId: "" }))}>
+                    <option value="">Selecione</option>
+                    {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name} · {contact.company || contact.phone}</option>)}
+                  </select>
+                </label>
+                <label>Oportunidade
+                  <select className="input" value={form.dealId} onChange={(event) => setForm((current) => ({ ...current, dealId: event.target.value }))}>
+                    <option value="">Sem vínculo</option>
+                    {deals.filter((deal) => !form.contactId || deal.contactId === form.contactId).map((deal) => <option key={deal.id} value={deal.id}>{deal.title} · {money(deal.value)}</option>)}
+                  </select>
+                </label>
+                <label className="span-2">Serviço / demanda
+                  <input className="input" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
+                </label>
+                <label>Status
+                  <select className="input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as ServiceOrderStatus }))}>
+                    {statusOrder.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+                  </select>
+                </label>
+                <label>Prioridade
+                  <select className="input" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value as LeadTemperature }))}>
+                    <option value="frio">Baixa</option>
+                    <option value="morno">Média</option>
+                    <option value="quente">Alta</option>
+                  </select>
+                </label>
+                <label>Responsável
+                  <input className="input" value={form.owner} onChange={(event) => setForm((current) => ({ ...current, owner: event.target.value }))} />
+                </label>
+                <label>Previsão
+                  <input className="input" type="datetime-local" value={form.dueAt} onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))} />
+                </label>
+                <label>Valor estimado
+                  <input className="input" value={form.estimatedValue} onChange={(event) => setForm((current) => ({ ...current, estimatedValue: event.target.value }))} />
+                </label>
+                <label>Valor final
+                  <input className="input" value={form.finalValue} onChange={(event) => setForm((current) => ({ ...current, finalValue: event.target.value }))} />
+                </label>
+                <label className="span-2">Descrição do serviço
+                  <textarea className="input" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="O que precisa ser feito?" />
+                </label>
+                <label className="span-2">Observações internas
+                  <textarea className="input" value={form.internalNotes} onChange={(event) => setForm((current) => ({ ...current, internalNotes: event.target.value }))} placeholder="Informações para a equipe, materiais, combinados..." />
+                </label>
+              </div>
+              <button className="btn full" type="button" disabled={saving} onClick={saveOrder}>{saving ? "Salvando..." : editingId ? "Salvar alterações" : "Criar OS"}</button>
+            </>
+          ) : selectedOrder ? (
+            <>
+              <div className="os-panel-head">
+                <div>
+                  <p className="eyebrow-small">OS selecionada</p>
+                  <h2>{selectedOrder.code}</h2>
+                </div>
+                <button className="btn mini secondary" onClick={() => startEdit(selectedOrder)}>Editar</button>
+              </div>
+              <div className="os-selected-summary">
+                <em className={`os-status-pill ${orderStatusClass(selectedOrder)}`}>{isLate(selectedOrder) ? "Atrasada" : statusLabels[selectedOrder.status]}</em>
+                <strong>{selectedOrder.title}</strong>
+                <p>{selectedContact?.name || "Contato"} · {selectedContact?.company || selectedContact?.phone || "sem empresa"}</p>
+                <div className="crm-summary-grid">
+                  <div><span>Responsável</span><strong>{selectedOrder.owner}</strong></div>
+                  <div><span>Prazo</span><strong>{selectedOrder.dueAt ? shortDate(selectedOrder.dueAt) : "sem prazo"}</strong></div>
+                  <div><span>Prioridade</span><strong>{priorityLabels[selectedOrder.priority]}</strong></div>
+                  <div><span>Valor</span><strong>{money(selectedOrder.finalValue || selectedOrder.estimatedValue)}</strong></div>
+                </div>
+                {selectedOrder.description && <p className="os-detail-copy">{selectedOrder.description}</p>}
+                {selectedOrder.internalNotes && <p className="os-detail-copy muted">Obs. interna: {selectedOrder.internalNotes}</p>}
+                <div className="os-panel-actions">
+                  <Link className="btn secondary" href={`/inbox?contact=${selectedOrder.contactId}`}>Abrir Inbox</Link>
+                  <button className="btn secondary" type="button" onClick={() => startCreate(selectedOrder.contactId)}>Nova OS desse cliente</button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="empty-state os-empty-list">
+              <strong>Selecione uma OS.</strong>
+              <p className="muted">Clique em uma linha da lista para ver detalhes ou criar uma nova ordem.</p>
+            </div>
+          )}
+        </aside>
       </section>
     </>
   );
