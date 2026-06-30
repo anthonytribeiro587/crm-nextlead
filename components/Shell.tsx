@@ -60,6 +60,19 @@ export function Shell({ children, currentUser }: { children: React.ReactNode; cu
         </div>
       </aside>
       <main className="main">{children}</main>
+
+      <nav className="mobile-bottom-nav" aria-label="Navegação principal mobile">
+        {nav.map((item) => {
+          const Icon = item.icon;
+          const active = pathname === item.href;
+          return (
+            <Link key={`mobile-${item.href}`} href={item.href} className={`mobile-bottom-link ${active ? "active" : ""}`}>
+              <Icon size={18} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }
