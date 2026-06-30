@@ -1,4 +1,4 @@
-import type { Activity, Contact, Deal, Message, Stage } from "./types";
+import type { Activity, Contact, Deal, Message, ServiceOrder, Stage } from "./types";
 
 export const stages: Stage[] = [
   { id: "novo", title: "Novo lead", order: 1, color: "#3b82f6" },
@@ -76,4 +76,41 @@ export const activities: Activity[] = [
   { id: "a1", contactId: "c1", title: "Enviar proposta com 2 opções", dueAt: "2026-06-26T09:00:00.000Z", done: false },
   { id: "a2", contactId: "c3", title: "Pedir fotos reais dos serviços", dueAt: "2026-06-26T15:00:00.000Z", done: false },
   { id: "a3", contactId: "c2", title: "Validar logo em branco para hero", dueAt: "2026-06-25T18:00:00.000Z", done: true },
+];
+
+
+export const serviceOrders: ServiceOrder[] = [
+  {
+    id: "os1",
+    contactId: "c2",
+    dealId: "d2",
+    code: "OS-0001",
+    title: "Avaliação de atendimento para assistência",
+    description: "Mapear fluxo de orçamento, entrada de aparelho e retorno ao cliente.",
+    status: "diagnostico",
+    priority: "morno",
+    owner: "Felipe",
+    estimatedValue: 900,
+    finalValue: 0,
+    dueAt: "2026-07-03T18:00:00.000Z",
+    internalNotes: "Cliente quer rapidez no WhatsApp e histórico por atendimento.",
+    createdAt: "2026-06-25T12:30:00.000Z",
+    updatedAt: "2026-06-25T12:30:00.000Z",
+  },
+  {
+    id: "os2",
+    contactId: "c3",
+    dealId: "d3",
+    code: "OS-0002",
+    title: "Página de manutenções prediais",
+    description: "Organizar serviços, provas visuais e captação pelo WhatsApp.",
+    status: "execucao",
+    priority: "quente",
+    owner: "Miguel",
+    estimatedValue: 1500,
+    finalValue: 0,
+    dueAt: "2026-07-05T18:00:00.000Z",
+    createdAt: "2026-06-26T09:00:00.000Z",
+    updatedAt: "2026-06-26T09:00:00.000Z",
+  },
 ];

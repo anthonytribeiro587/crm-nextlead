@@ -1,8 +1,15 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { ensureDefaultPipeline } from "./default-pipeline";
-import { activities as mockActivities, contacts as mockContacts, deals as mockDeals, messages as mockMessages, stages as mockStages } from "./mock-data";
-import type { Activity, Contact, Deal, Message, Stage } from "./types";
+import {
+  activities as mockActivities,
+  contacts as mockContacts,
+  deals as mockDeals,
+  messages as mockMessages,
+  serviceOrders as mockServiceOrders,
+  stages as mockStages,
+} from "./mock-data";
+import type { Activity, Contact, Deal, Message, ServiceOrder, Stage } from "./types";
 
 export type CrmData = {
   contacts: Contact[];
@@ -10,8 +17,11 @@ export type CrmData = {
   stages: Stage[];
   messages: Message[];
   activities: Activity[];
+  serviceOrders: ServiceOrder[];
   isDemo: boolean;
   error?: string;
+  serviceOrdersReady?: boolean;
+  serviceOrdersError?: string;
 };
 
 const emptyData: CrmData = {
@@ -20,7 +30,9 @@ const emptyData: CrmData = {
   stages: mockStages,
   messages: [],
   activities: [],
+  serviceOrders: [],
   isDemo: false,
+  serviceOrdersReady: true,
 };
 
 function fallbackData(error?: string): CrmData {
@@ -30,14 +42,38 @@ function fallbackData(error?: string): CrmData {
     stages: mockStages,
     messages: mockMessages,
     activities: mockActivities,
+    serviceOrders: mockServiceOrders,
     isDemo: true,
     error,
+    serviceOrdersReady: true,
   };
 }
 
 function normalizeTags(tags: unknown): string[] {
   if (Array.isArray(tags)) return tags.map(String).filter(Boolean);
   return [];
+}
+
+function mapServiceOrder(row: any): ServiceOrder {
+  return {
+    id: row.id,
+    contactId: row.contact_id,
+    dealId: row.deal_id || undefined,
+    code: row.code || "OS",
+    title: row.title || "Ordem de serviço",
+    description: row.description || undefined,
+    status: row.status || "aberta",
+    priority: row.priority || "morno",
+    owner: row.owner || "NextLead",
+    estimatedValue: Number(row.estimated_value || 0),
+    finalValue: Number(row.final_value || 0),
+    dueAt: row.due_at || undefined,
+    startedAt: row.started_at || undefined,
+    completedAt: row.completed_at || undefined,
+    internalNotes: row.internal_notes || undefined,
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
+  };
 }
 
 export async function getCrmData(): Promise<CrmData> {
@@ -51,18 +87,20 @@ export async function getCrmData(): Promise<CrmData> {
   const stagesPromise = supabase.from("pipeline_stages").select("id,title,position,color").order("position", { ascending: true });
   const dealsPromise = supabase.from("deals").select("id,contact_id,stage_id,title,value,status,expected_close,lost_reason,created_at").order("created_at", { ascending: false }).limit(200);
   const messagesPromise = supabase.from("messages").select("id,contact_id,direction,body,status,provider_message_id,created_at").order("created_at", { ascending: true }).limit(500);
-  const activitiesPromise = supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(200);
+  const activitiesPromise = supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(300);
+  const serviceOrdersPromise = supabase
+    .from("service_orders")
+    .select("id,contact_id,deal_id,code,title,description,status,priority,owner,estimated_value,final_value,due_at,started_at,completed_at,internal_notes,created_at,updated_at")
+    .order("created_at", { ascending: false })
+    .limit(300);
 
   // Tipamos como any porque fazemos fallback de select com/sem a coluna owner.
-  // O Supabase infere tipos diferentes para cada select, e o build da Vercel
-  // não permite reatribuir uma resposta com formato diferente.
   let contactsResult: any = await supabase
     .from("contacts")
     .select("id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at,created_at")
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(300);
 
-  // Compatível com bancos criados antes da coluna contacts.owner.
   let hasOwnerColumn = true;
   if (contactsResult.error?.message.toLowerCase().includes("owner")) {
     hasOwnerColumn = false;
@@ -70,15 +108,22 @@ export async function getCrmData(): Promise<CrmData> {
       .from("contacts")
       .select("id,name,phone,email,company,source,temperature,tags,notes,last_message_at,created_at")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(300);
   }
 
-  const [stagesResult, dealsResult, messagesResult, activitiesResult] = await Promise.all([
+  const [stagesResult, dealsResult, messagesResult, activitiesResult, serviceOrdersResult] = await Promise.all([
     stagesPromise,
     dealsPromise,
     messagesPromise,
     activitiesPromise,
+    serviceOrdersPromise,
   ]);
+
+  const serviceOrdersMissing = Boolean(
+    serviceOrdersResult.error?.message?.toLowerCase().includes("service_orders") ||
+      serviceOrdersResult.error?.message?.toLowerCase().includes("does not exist") ||
+      serviceOrdersResult.error?.code === "42P01",
+  );
 
   const errors = [
     stagesResult.error?.message,
@@ -86,6 +131,7 @@ export async function getCrmData(): Promise<CrmData> {
     dealsResult.error?.message,
     messagesResult.error?.message,
     activitiesResult.error?.message,
+    serviceOrdersMissing ? undefined : serviceOrdersResult.error?.message,
   ].filter(Boolean);
 
   if (errors.length) {
@@ -144,6 +190,8 @@ export async function getCrmData(): Promise<CrmData> {
     done: Boolean(activity.done),
   }));
 
+  const serviceOrders: ServiceOrder[] = serviceOrdersMissing ? [] : (serviceOrdersResult.data || []).map(mapServiceOrder);
+
   return {
     ...emptyData,
     stages: stages.length ? stages : mockStages,
@@ -151,6 +199,9 @@ export async function getCrmData(): Promise<CrmData> {
     deals,
     messages,
     activities,
+    serviceOrders,
+    serviceOrdersReady: !serviceOrdersMissing,
+    serviceOrdersError: serviceOrdersMissing ? "Tabela service_orders ainda não existe. Rode scripts/migration-v3-service-orders.sql no Supabase." : undefined,
     isDemo: false,
   };
 }

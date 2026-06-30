@@ -21,7 +21,7 @@ function activityKey(activity: { contactId: string; title: string; dueAt: string
 }
 
 export default async function DashboardPage() {
-  const { contacts, deals, messages, activities, stages, isDemo } = await getCrmData();
+  const { contacts, deals, messages, activities, stages, serviceOrders, serviceOrdersReady, isDemo } = await getCrmData();
   const now = new Date();
   const today = startOfDay(now);
   const tomorrow = new Date(today);
@@ -33,6 +33,8 @@ export default async function DashboardPage() {
   const totalPipeline = openDeals.reduce((sum, deal) => sum + deal.value, 0);
   const hotLeads = contacts.filter((contact) => contact.temperature === "quente").length;
   const proposalsOpen = openDeals.filter((deal) => stageById.get(deal.stageId)?.title.toLowerCase().includes("proposta"));
+  const openServiceOrders = serviceOrders.filter((order) => !["concluida", "entregue", "cancelada"].includes(order.status));
+  const lateServiceOrders = openServiceOrders.filter((order) => order.dueAt && new Date(order.dueAt).getTime() < now.getTime()).length;
 
   const pendingActivityKeys = new Set(
     activities
@@ -80,14 +82,16 @@ export default async function DashboardPage() {
           <span className={`system-status ${isDemo ? "demo" : "online"}`}>{isDemo ? "Modo demo" : "Supabase conectado"}</span>
           <Link className="btn" href="/inbox">Abrir Inbox</Link>
           <Link className="btn secondary" href="/funil">Ver Funil</Link>
+          <Link className="btn secondary" href="/ordens">Ordens</Link>
         </div>
       </section>
 
-      <section className="grid cols-4" style={{ marginBottom: 14 }}>
+      <section className="grid cols-4 dashboard-metrics-grid" style={{ marginBottom: 14 }}>
         <MetricCard label="Pipeline aberto" value={money(totalPipeline)} hint={`${openDeals.length} oportunidades ativas`} />
         <MetricCard label="Tarefas pendentes" value={String(pendingActivities)} hint={`${todayActivities} para hoje · ${overdueActivities} atrasada(s)`} />
         <MetricCard label="Propostas abertas" value={String(proposalsOpen.length)} hint={money(proposalsOpen.reduce((sum, deal) => sum + deal.value, 0))} />
         <MetricCard label="Leads quentes" value={String(hotLeads)} hint={`${newToday} atualização(ões) hoje`} />
+        <MetricCard label="Ordens abertas" value={String(openServiceOrders.length)} hint={serviceOrdersReady ? `${lateServiceOrders} atrasada(s)` : "ative a tabela OS"} />
       </section>
 
       <section className="dashboard-grid-pro">
@@ -150,6 +154,37 @@ export default async function DashboardPage() {
                       <small>{contact?.name || "Lead"} · {contact?.company || "sem empresa"}</small>
                     </span>
                     <em>{money(deal.value)}</em>
+                  </Link>
+                );
+              })
+            )}
+          </div>
+        </article>
+
+        <article className="card dashboard-panel-pro">
+          <div className="section-headline">
+            <div>
+              <p className="eyebrow-small">Operação</p>
+              <h2>Ordens em aberto</h2>
+              <p className="muted">Demandas que já viraram execução ou entrega.</p>
+            </div>
+            <Link className="btn mini secondary" href="/ordens">OS</Link>
+          </div>
+          <div className="compact-list-pro">
+            {!serviceOrdersReady ? (
+              <div className="empty-state mini-empty">Rode a migration-v3-service-orders.sql para ativar.</div>
+            ) : openServiceOrders.length === 0 ? (
+              <div className="empty-state mini-empty">Nenhuma OS aberta.</div>
+            ) : (
+              openServiceOrders.slice(0, 5).map((order) => {
+                const contact = contactById.get(order.contactId);
+                return (
+                  <Link key={order.id} className="compact-row-pro" href="/ordens">
+                    <span>
+                      <strong>{order.code} · {order.title}</strong>
+                      <small>{contact?.name || "Contato"} · {order.status.replaceAll("_", " ")}</small>
+                    </span>
+                    <em>{order.dueAt ? shortDate(order.dueAt) : money(order.estimatedValue)}</em>
                   </Link>
                 );
               })

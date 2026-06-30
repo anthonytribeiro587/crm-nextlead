@@ -1,29 +1,30 @@
-# NextLead CRM v6 — Evolution API
+# Deploy NextLead CRM
 
-Esta versão inclui CRM + Funil + Login + Supabase + Landing API + Integração Evolution API.
+## Antes do deploy
 
-## Variáveis principais na Vercel
+Não altere as variáveis que já estão funcionando:
 
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-NEXT_PUBLIC_APP_URL=https://nextlead-crm.vercel.app
-NEXT_PUBLIC_DEFAULT_PIPELINE_ID=00000000-0000-0000-0000-000000000001
-NEXTLEAD_AUTH_SECRET=
-NEXTLEAD_ANTHONY_PASSWORD=
-NEXTLEAD_FELIPE_PASSWORD=
-NEXTLEAD_ALLOWED_ORIGINS=*
-WHATSAPP_PROVIDER=evolution
-EVOLUTION_API_URL=http://147.15.89.173:8080
-EVOLUTION_API_KEY=nextlead_api_2026
-EVOLUTION_INSTANCE=nextlead
-WHATSAPP_WEBHOOK_SECRET=nextlead_webhook_2026
+- Supabase URL
+- Supabase Service Role Key
+- Evolution API URL
+- Evolution API Key
+- Evolution Instance
+- Webhook Secret
 
-## Importante
+## Novo módulo: Ordens de Serviço
 
-Apague package-lock antigo, tsconfig.tsbuildinfo antigo e qualquer node_modules antes de subir. Esta versão já vem com package-lock novo e testado.
+Depois de subir este pacote, rode no Supabase SQL Editor o arquivo:
 
-## Testado
+```txt
+scripts/migration-v3-service-orders.sql
+```
 
-npm install
-npm run build
+Isso cria a tabela `service_orders` usada pela tela `/ordens`, pela ficha do contato no `/crm` e pelo botão “Criar OS” no Inbox.
+
+## Testes rápidos
+
+1. Abrir `/crm` e selecionar um contato.
+2. Clicar em “Criar OS”.
+3. Abrir `/ordens` e alterar o status da OS.
+4. Voltar ao `/crm` e conferir se o histórico registrou o evento.
+5. Abrir no mobile e conferir a navbar inferior.

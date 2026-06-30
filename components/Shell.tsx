@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, KanbanSquare, LogOut, MessageCircle, Settings, Users } from "lucide-react";
+import { BarChart3, ClipboardList, KanbanSquare, LogOut, MessageCircle, Settings, Users } from "lucide-react";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
   { href: "/inbox", label: "Inbox", icon: MessageCircle },
   { href: "/funil", label: "Funil", icon: KanbanSquare },
   { href: "/crm", label: "CRM", icon: Users },
+  { href: "/ordens", label: "OS", icon: ClipboardList },
   { href: "/configuracoes", label: "Setup", icon: Settings },
 ];
 

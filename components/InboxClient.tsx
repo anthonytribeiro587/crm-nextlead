@@ -119,6 +119,7 @@ export function InboxClient({
   const [deleting, setDeleting] = useState(false);
   const [editingDeal, setEditingDeal] = useState(false);
   const [savingDeal, setSavingDeal] = useState(false);
+  const [creatingOrder, setCreatingOrder] = useState(false);
   const [followUpAt, setFollowUpAt] = useState(tomorrowBusinessTime);
   const [dealForm, setDealForm] = useState({ title: "", value: "", expectedClose: "" });
   const [proposalModel, setProposalModel] = useState<ProposalModel>("landing-pro");
@@ -384,6 +385,39 @@ export function InboxClient({
       setActionMessage(error instanceof Error ? error.message : "Erro ao atualizar lead.");
     } finally {
       setUpdatingLead(false);
+    }
+  }
+
+  async function createServiceOrderFromInbox() {
+    if (!selected) return;
+
+    setCreatingOrder(true);
+    setActionMessage(null);
+
+    try {
+      const response = await fetch("/api/service-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: selected.id,
+          dealId: selectedDeal?.id || null,
+          title: selectedDeal?.title || `Atendimento operacional - ${selected.name}`,
+          description: "Demanda criada a partir do atendimento no Inbox.",
+          status: "aberta",
+          priority: selected.temperature,
+          owner: selected.owner,
+          estimatedValue: selectedDeal?.value || 0,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || result.error || "Erro ao criar ordem de serviço.");
+      setActionMessage(`OS criada${result.serviceOrder?.code ? `: ${result.serviceOrder.code}` : ""}.`);
+      await logCommercialHistory(`OS criada${result.serviceOrder?.code ? `: ${result.serviceOrder.code}` : ""}`);
+      router.refresh();
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Erro ao criar ordem de serviço.");
+    } finally {
+      setCreatingOrder(false);
     }
   }
 
@@ -838,6 +872,15 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
                 <input className="input input-compact" type="datetime-local" value={followUpAt} onChange={(event) => setFollowUpAt(event.target.value)} />
                 <button className="btn mini secondary" onClick={() => scheduleFollowUp(followUpAt)} disabled={!selected || schedulingFollowUp}>
                   {schedulingFollowUp ? "Agendando..." : "Agendar follow-up"}
+                </button>
+              </div>
+
+              <div className="followup-box os-quick-create">
+                <span className="eyebrow-small">Execução</span>
+                <strong>Criar ordem de serviço</strong>
+                <p className="muted tool-hint">Use quando a conversa virar uma demanda para entregar, instalar, reparar ou executar.</p>
+                <button className="btn mini" onClick={createServiceOrderFromInbox} disabled={!selected || creatingOrder}>
+                  {creatingOrder ? "Criando OS..." : "Criar OS deste lead"}
                 </button>
               </div>
             </div>
