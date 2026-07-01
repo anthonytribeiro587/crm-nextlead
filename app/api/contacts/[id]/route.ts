@@ -7,6 +7,21 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const allowedTemperatures = new Set(["frio", "morno", "quente"]);
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidUuid(value: string) {
+  return uuidRegex.test(String(value || ""));
+}
+
+function invalidContactResponse() {
+  return NextResponse.json(
+    {
+      error:
+        "Contato inválido para alteração. Atualize a página; contatos demonstrativos não são gravados no Supabase.",
+    },
+    { status: 400 },
+  );
+}
 
 function cleanText(value: unknown, fallback = "") {
   const result = String(value ?? fallback).trim();
@@ -28,6 +43,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   if (!contactId) {
     return NextResponse.json({ error: "ID do contato é obrigatório." }, { status: 400 });
+  }
+
+  if (!isValidUuid(contactId)) {
+    return invalidContactResponse();
   }
 
   const payload = await request.json().catch(() => ({}));
@@ -107,10 +126,19 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     return NextResponse.json({ error: "ID do contato é obrigatório." }, { status: 400 });
   }
 
+  if (!isValidUuid(contactId)) {
+    return invalidContactResponse();
+  }
+
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ ok: true, demo: true });
   }
+
+  await supabase.from("activities").delete().eq("contact_id", contactId);
+  await supabase.from("messages").delete().eq("contact_id", contactId);
+  await supabase.from("deals").delete().eq("contact_id", contactId);
+  await supabase.from("service_orders").delete().eq("contact_id", contactId);
 
   const { error } = await supabase.from("contacts").delete().eq("id", contactId);
 

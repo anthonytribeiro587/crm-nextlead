@@ -39,6 +39,19 @@ const emptyData: CrmData = {
 };
 
 function fallbackData(error?: string): CrmData {
+  const enableDemoData =
+    process.env.NEXT_PUBLIC_ENABLE_DEMO_DATA === "true" ||
+    process.env.ENABLE_DEMO_DATA === "true";
+
+  if (!enableDemoData) {
+    return {
+      ...emptyData,
+      error,
+      isDemo: false,
+      serviceOrdersReady: false,
+    };
+  }
+
   return {
     contacts: mockContacts,
     deals: mockDeals,
@@ -161,7 +174,7 @@ export async function getCrmData(): Promise<CrmData> {
       .limit(300);
   }
 
-  const [pipelinesResult, stagesResult, dealsResult, messagesResult, activitiesResult, serviceOrdersResult] = await Promise.all([
+  let [pipelinesResult, stagesResult, dealsResult, messagesResult, activitiesResult, serviceOrdersResult]: any[] = await Promise.all([
     pipelinesPromise,
     stagesPromise,
     dealsPromise,
@@ -169,6 +182,30 @@ export async function getCrmData(): Promise<CrmData> {
     activitiesPromise,
     serviceOrdersPromise,
   ]);
+
+  if (pipelinesResult.error?.message?.toLowerCase().includes("created_at")) {
+    pipelinesResult = await supabase.from("pipelines").select("id,name").order("name", { ascending: true });
+  }
+
+  if (dealsResult.error?.message?.toLowerCase().includes("pipeline_id")) {
+    dealsResult = await supabase
+      .from("deals")
+      .select("id,contact_id,stage_id,title,value,status,expected_close,lost_reason,created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+  }
+
+  if (
+    messagesResult.error?.message?.toLowerCase().includes("raw_payload") ||
+    messagesResult.error?.message?.toLowerCase().includes("provider_message_id") ||
+    messagesResult.error?.message?.toLowerCase().includes("type")
+  ) {
+    messagesResult = await supabase
+      .from("messages")
+      .select("id,contact_id,direction,body,status,created_at")
+      .order("created_at", { ascending: true })
+      .limit(500);
+  }
 
   const serviceOrdersMissing = Boolean(
     serviceOrdersResult.error?.message?.toLowerCase().includes("service_orders") ||

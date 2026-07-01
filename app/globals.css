@@ -7580,3 +7580,228 @@ button:disabled {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* NextLead CRM — v12.3: inbox profissional, sem demo acidental e ações compactas */
+.chat-head-pro {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 18px !important;
+  min-height: 88px !important;
+  padding: 16px 22px !important;
+}
+.whatsapp-contact-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  min-width: 0 !important;
+}
+.whatsapp-contact-title > div {
+  min-width: 0 !important;
+}
+.whatsapp-contact-title h2,
+.whatsapp-contact-title .muted {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.whatsapp-chat-actions {
+  display: grid !important;
+  grid-template-columns: minmax(210px, 260px) auto auto !important;
+  align-items: center !important;
+  justify-content: end !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+}
+.header-stage-whatsapp {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 260px !important;
+  min-height: 58px !important;
+  display: grid !important;
+  gap: 2px !important;
+  padding: 9px 12px !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(34, 211, 238, .20) !important;
+  background: linear-gradient(180deg, rgba(15, 23, 42, .70), rgba(15, 23, 42, .42)) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025) !important;
+}
+.header-stage-whatsapp span {
+  margin: 0 !important;
+  color: #22d3ee !important;
+  font-size: .64rem !important;
+  letter-spacing: .16em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+}
+.header-stage-whatsapp small {
+  display: block !important;
+  max-width: 100% !important;
+  margin: 1px 0 0 !important;
+  color: rgba(226, 232, 240, .62) !important;
+  font-size: .72rem !important;
+  font-weight: 800 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.header-stage-whatsapp select {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 22px !important;
+  margin: 0 !important;
+  padding: 0 22px 0 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: var(--text) !important;
+  font-size: .86rem !important;
+  font-weight: 900 !important;
+  line-height: 1.15 !important;
+  box-shadow: none !important;
+  appearance: auto !important;
+}
+.header-stage-whatsapp select:disabled {
+  opacity: .62 !important;
+  cursor: not-allowed !important;
+}
+.header-chip-button {
+  min-width: 0 !important;
+  width: auto !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 0 13px !important;
+  border-radius: 14px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  font-size: .78rem !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+}
+.os-head-button.header-chip-button {
+  border-color: rgba(148, 163, 184, .18) !important;
+  background: rgba(15, 23, 42, .48) !important;
+  color: rgba(226, 232, 240, .88) !important;
+}
+.tools-head-button.header-chip-button {
+  border-color: rgba(37, 99, 235, .38) !important;
+  background: linear-gradient(135deg, rgba(79, 70, 229, .92), rgba(14, 165, 233, .86)) !important;
+  color: white !important;
+}
+.thread-list-head.whatsapp-thread-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin-bottom: 14px !important;
+}
+.thread-stack.whatsapp-thread-stack {
+  gap: 10px !important;
+}
+.thread-pro.whatsapp-thread {
+  display: grid !important;
+  grid-template-columns: 46px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 11px !important;
+  padding: 12px 13px !important;
+  border: 1px solid rgba(148, 163, 184, .10) !important;
+  background: rgba(15, 23, 42, .34) !important;
+}
+.thread-pro.whatsapp-thread:hover {
+  border-color: rgba(34, 211, 238, .22) !important;
+  background: rgba(15, 23, 42, .54) !important;
+}
+.thread-pro.whatsapp-thread.active {
+  border-color: rgba(59, 130, 246, .42) !important;
+  background: linear-gradient(135deg, rgba(37, 99, 235, .28), rgba(14, 165, 233, .08)) !important;
+}
+.thread-copy {
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 3px !important;
+}
+.thread-title-line {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+.thread-title-line strong,
+.thread-preview,
+.thread-company-line {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.thread-title-line small {
+  color: rgba(226, 232, 240, .58) !important;
+  font-size: .70rem !important;
+  font-weight: 800 !important;
+}
+.thread-company-line {
+  color: rgba(148, 163, 184, .76) !important;
+  font-size: .72rem !important;
+}
+.thread-meta-side {
+  display: grid !important;
+  justify-items: end !important;
+  gap: 6px !important;
+  min-width: 48px !important;
+}
+.thread-meta-side .thread-temp {
+  position: static !important;
+  margin: 0 !important;
+  padding: 3px 0 !important;
+  font-size: .62rem !important;
+  line-height: 1 !important;
+  letter-spacing: .04em !important;
+}
+
+@media (max-width: 1180px) {
+  .whatsapp-chat-actions {
+    grid-template-columns: minmax(190px, 1fr) auto auto !important;
+  }
+  .header-stage-whatsapp {
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .chat-head-pro {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding: 13px 12px !important;
+  }
+  .whatsapp-contact-title {
+    width: 100% !important;
+  }
+  .whatsapp-chat-actions {
+    width: 100% !important;
+    grid-template-columns: minmax(0, 1fr) auto auto !important;
+    gap: 8px !important;
+  }
+  .header-stage-whatsapp {
+    min-height: 56px !important;
+    max-width: none !important;
+  }
+  .header-chip-button {
+    min-width: 48px !important;
+    height: 46px !important;
+    padding: 0 12px !important;
+  }
+}
+
+@media (max-width: 540px) {
+  .whatsapp-chat-actions {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .header-stage-whatsapp {
+    grid-column: 1 / -1 !important;
+  }
+  .header-chip-button {
+    width: 100% !important;
+  }
+}

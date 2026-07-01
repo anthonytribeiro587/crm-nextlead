@@ -1395,10 +1395,10 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
                 <option value="perdido">Perdido</option>
               </select>
             </label>
-            <button className="btn mini secondary os-head-button" onClick={() => openInspector("ordens")}>
+            <button className="btn mini secondary os-head-button header-chip-button" onClick={() => openInspector("ordens")}>
               {activeServiceOrders.length ? `${activeServiceOrders.length} OS aberta${activeServiceOrders.length > 1 ? "s" : ""}` : "OS"}
             </button>
-            <button className="btn mini" onClick={() => openInspector("acoes")}>Ferramentas</button>
+            <button className="btn mini header-chip-button tools-head-button" onClick={() => openInspector("acoes")}>Painel</button>
           </div>
         </header>
 
