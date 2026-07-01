@@ -156,6 +156,48 @@ function isMediaAudio(message: Message) {
   return Boolean(message.mediaUrl && (type.includes("audio") || message.mediaUrl.match(/\.(mp3|ogg|opus|wav|m4a)(\?|$)/i)));
 }
 
+function isMediaDocument(message: Message) {
+  const type = String(message.type || "").toLowerCase();
+  const body = String(message.body || "").toLowerCase();
+  return Boolean(
+    message.mediaUrl &&
+      (type.includes("document") ||
+        type.includes("arquivo") ||
+        body.includes("[arquivo]") ||
+        body.includes("[documento]") ||
+        message.mediaUrl.match(/\.(pdf|docx?|xlsx?|pptx?|zip|rar)(\?|$)/i) ||
+        message.mediaUrl.startsWith("data:application/")),
+  );
+}
+
+function messageNeedsMediaResolve(message: Message) {
+  const type = String(message.type || "").toLowerCase();
+  const body = String(message.body || "").toLowerCase();
+  if (message.mediaUrl) return false;
+  return (
+    type.includes("image") ||
+    type.includes("video") ||
+    type.includes("audio") ||
+    type.includes("document") ||
+    body.includes("[áudio]") ||
+    body.includes("[audio]") ||
+    body.includes("[imagem]") ||
+    body.includes("[vídeo]") ||
+    body.includes("[video]") ||
+    body.includes("[arquivo]") ||
+    body.includes("[documento]")
+  );
+}
+
+function mediaButtonLabel(message: Message) {
+  const type = String(message.type || "").toLowerCase();
+  const body = String(message.body || "").toLowerCase();
+  if (type.includes("audio") || body.includes("[áudio]") || body.includes("[audio]")) return "Carregar áudio";
+  if (type.includes("image") || body.includes("[imagem]")) return "Carregar imagem";
+  if (type.includes("video") || body.includes("[vídeo]") || body.includes("[video]")) return "Carregar vídeo";
+  return "Carregar arquivo";
+}
+
 export function InboxClient({
   contacts: initialContacts,
   messages: initialMessages,
@@ -198,7 +240,9 @@ export function InboxClient({
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [resolvingMediaIds, setResolvingMediaIds] = useState<Record<string, boolean>>({});
   const [showOrderDraft, setShowOrderDraft] = useState(false);
   const [orderDraft, setOrderDraft] = useState({
     title: "",
@@ -250,6 +294,11 @@ export function InboxClient({
     }
     return map;
   }, [messages]);
+
+  function hasUnreadInbound(contactId: string) {
+    const latest = latestMessageByContact.get(contactId);
+    return Boolean(latest?.direction === "inbound" && latest.status !== "read");
+  }
 
   const orderedContacts = useMemo(() => {
     return contacts
@@ -417,6 +466,37 @@ export function InboxClient({
       document.removeEventListener("visibilitychange", refreshOnVisible);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isRecordingAudio) {
+      setRecordingSeconds(0);
+      return;
+    }
+
+    setRecordingSeconds(0);
+    const interval = window.setInterval(() => setRecordingSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(interval);
+  }, [isRecordingAudio]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const hasUnread = threadMessages.some((message) => message.direction === "inbound" && message.status !== "read");
+    if (!hasUnread) return;
+
+    setMessages((current) =>
+      current.map((message) =>
+        message.contactId === selected.id && message.direction === "inbound" && message.status !== "read"
+          ? { ...message, status: "read" }
+          : message,
+      ),
+    );
+
+    fetch("/api/inbox/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId: selected.id }),
+    }).catch(() => null);
+  }, [selected?.id, threadMessages.length]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -897,6 +977,40 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
     }
   }
 
+  async function resolveMessageMedia(message: Message) {
+    if (!messageNeedsMediaResolve(message) || resolvingMediaIds[message.id]) return;
+    setResolvingMediaIds((current) => ({ ...current, [message.id]: true }));
+    setActionMessage(null);
+
+    try {
+      const response = await fetch("/api/whatsapp/media-resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: message.id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.mediaUrl) throw new Error(result.error || "Não foi possível carregar a mídia.");
+
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === message.id
+            ? {
+                ...item,
+                mediaUrl: result.mediaUrl,
+                fileName: result.fileName || item.fileName,
+                type: result.mediaType || item.type,
+              }
+            : item,
+        ),
+      );
+      setActionMessage("Mídia carregada no atendimento.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Não foi possível carregar a mídia.");
+    } finally {
+      setResolvingMediaIds((current) => ({ ...current, [message.id]: false }));
+    }
+  }
+
   async function sendMessage() {
     const body = draft.trim();
     if (!body || !selected) return;
@@ -1032,6 +1146,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
 
   async function toggleAudioRecording() {
     if (isRecordingAudio) {
+      setActionMessage("Finalizando e enviando áudio...");
       mediaRecorderRef.current?.stop();
       return;
     }
@@ -1057,18 +1172,26 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
         audioStreamRef.current?.getTracks().forEach((track) => track.stop());
         audioStreamRef.current = null;
         const mimeType = recorder.mimeType || "audio/webm";
+        const extension = mimeType.includes("ogg") || mimeType.includes("opus") ? "ogg" : "webm";
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         audioChunksRef.current = [];
-        if (blob.size > 0) await sendMediaBlob(blob, `audio-${Date.now()}.webm`);
+        if (blob.size > 0) await sendMediaBlob(blob, `audio-${Date.now()}.${extension}`);
       };
 
       recorder.start();
+      setRecordingSeconds(0);
       setIsRecordingAudio(true);
-      setActionMessage("Gravando áudio. Clique em parar para enviar.");
+      setActionMessage("Gravando áudio. Clique no microfone novamente para enviar.");
     } catch {
       setIsRecordingAudio(false);
       setActionMessage("Não consegui acessar o microfone. Verifique a permissão do navegador.");
     }
+  }
+
+  function formatRecordingTime(seconds: number) {
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
   }
 
   if (contacts.length === 0) {
@@ -1096,7 +1219,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
         <div className="thread-stack whatsapp-thread-stack">
           {orderedContacts.map((contact) => {
             const latest = latestMessageByContact.get(contact.id);
-            const waitingReply = latest?.direction === "inbound";
+            const waitingReply = hasUnreadInbound(contact.id);
             const avatarUrl = avatarUrls[contact.id] || contact.avatarUrl;
             return (
               <button
@@ -1119,7 +1242,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
                   <span className="thread-company-line">{contact.company || contact.source}</span>
                 </span>
                 <span className="thread-meta-side">
-                  {waitingReply && <span className="unread-dot">novo</span>}
+                  {waitingReply && <span className="unread-indicator" title="Mensagem nova" aria-label="Mensagem nova" />}
                   <span className={`thread-temp ${contact.temperature}`}>{contact.temperature}</span>
                 </span>
               </button>
@@ -1168,19 +1291,48 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
               <p className="muted">Nenhuma mensagem ainda. Envie a primeira mensagem para testar o fluxo.</p>
             </div>
           )}
-          {threadMessages.map((message) => (
-            <div key={message.id} className={`message whatsapp-bubble ${message.direction === "outbound" ? "outbound" : ""} ${message.status === "failed" ? "failed" : ""}`}>
-              {isMediaImage(message) ? (
-                <img className="message-media-image" src={message.mediaUrl} alt={message.body || "Imagem recebida"} />
-              ) : isMediaVideo(message) ? (
-                <video className="message-media-image" src={message.mediaUrl} controls />
-              ) : isMediaAudio(message) ? (
-                <audio className="message-audio" src={message.mediaUrl} controls />
-              ) : null}
-              <span>{message.body}</span>
-              <small>{shortDate(message.createdAt)} • {messageStatusLabel(message.status)}</small>
-            </div>
-          ))}
+          {threadMessages.map((message) => {
+            const isResolving = Boolean(resolvingMediaIds[message.id]);
+            const fileName = message.fileName || message.body.replace(/^\[(arquivo|documento|áudio|audio|imagem|vídeo|video)\]\s*/i, "") || "mídia";
+            return (
+              <div key={message.id} className={`message whatsapp-bubble ${message.direction === "outbound" ? "outbound" : ""} ${message.status === "failed" ? "failed" : ""}`}>
+                {isMediaImage(message) ? (
+                  <a href={message.mediaUrl} target="_blank" rel="noreferrer" className="message-media-link" title="Abrir imagem">
+                    <img className="message-media-image" src={message.mediaUrl} alt={message.body || "Imagem recebida"} />
+                  </a>
+                ) : isMediaVideo(message) ? (
+                  <video className="message-media-image" src={message.mediaUrl} controls />
+                ) : isMediaAudio(message) ? (
+                  <audio className="message-audio" src={message.mediaUrl} controls />
+                ) : isMediaDocument(message) ? (
+                  <div className="message-file-card">
+                    <div className="message-file-icon">📄</div>
+                    <div>
+                      <strong>{fileName}</strong>
+                      <span>Documento anexado</span>
+                    </div>
+                    <a href={message.mediaUrl} target="_blank" rel="noreferrer" download={message.fileName || undefined}>Abrir</a>
+                  </div>
+                ) : messageNeedsMediaResolve(message) ? (
+                  <div className="message-file-card message-file-card-pending">
+                    <div className="message-file-icon">↧</div>
+                    <div>
+                      <strong>{message.body}</strong>
+                      <span>Mídia recebida. Clique para carregar no CRM.</span>
+                    </div>
+                    <button type="button" onClick={() => resolveMessageMedia(message)} disabled={isResolving}>
+                      {isResolving ? "Carregando..." : mediaButtonLabel(message)}
+                    </button>
+                  </div>
+                ) : null}
+                {!isMediaDocument(message) && !isMediaAudio(message) && !isMediaImage(message) && !isMediaVideo(message) && <span>{message.body}</span>}
+                {isMediaAudio(message) && <span className="message-media-caption">Áudio</span>}
+                {isMediaImage(message) && message.body && !message.body.toLowerCase().includes("[imagem]") && <span className="message-media-caption">{message.body}</span>}
+                {isMediaVideo(message) && <span className="message-media-caption">Vídeo</span>}
+                <small>{shortDate(message.createdAt)} • {messageStatusLabel(message.status)}</small>
+              </div>
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
 
@@ -1188,12 +1340,9 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
           <div className="composer-attachment-wrap">
             <button className="composer-plus" type="button" onClick={() => setShowAttachmentMenu((current) => !current)} aria-label="Anexar mídia">+</button>
             {showAttachmentMenu && (
-              <div className="attachment-menu">
+              <div className="attachment-menu attachment-menu-files-only">
                 <button type="button" onClick={() => mediaFileInputRef.current?.click()} disabled={sendingMedia}>
                   Imagem, vídeo ou arquivo
-                </button>
-                <button type="button" onClick={toggleAudioRecording} disabled={sendingMedia} className={isRecordingAudio ? "recording" : ""}>
-                  {isRecordingAudio ? "Parar e enviar áudio" : "Gravar áudio"}
                 </button>
               </div>
             )}
@@ -1217,7 +1366,18 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
               }
             }}
           />
-          <button className="btn send-round" onClick={sendMessage} disabled={sendingMedia}>{sendingMedia ? "Enviando..." : "Enviar"}</button>
+          <button
+            className={`composer-mic ${isRecordingAudio ? "recording" : ""}`}
+            type="button"
+            onClick={toggleAudioRecording}
+            disabled={sendingMedia}
+            aria-label={isRecordingAudio ? "Parar e enviar áudio" : "Gravar áudio"}
+            title={isRecordingAudio ? "Clique para enviar" : "Gravar áudio"}
+          >
+            <span>{isRecordingAudio ? "■" : "🎙"}</span>
+            {isRecordingAudio && <strong>{formatRecordingTime(recordingSeconds)}</strong>}
+          </button>
+          <button className="btn send-round" onClick={sendMessage} disabled={sendingMedia || isRecordingAudio}>{sendingMedia ? "Enviando..." : "Enviar"}</button>
         </footer>
       </div>
 

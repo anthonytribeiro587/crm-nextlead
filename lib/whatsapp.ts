@@ -273,3 +273,116 @@ export async function configureEvolutionWebhook(webhookUrl: string) {
 
   return payload;
 }
+
+export interface ResolveWhatsAppMediaInput {
+  rawPayload: any;
+  mediaType?: "image" | "video" | "audio" | "document" | string;
+  mimetype?: string;
+}
+
+function pickFirstString(...values: any[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function extractResolvedBase64(payload: any) {
+  return pickFirstString(
+    payload?.base64,
+    payload?.data?.base64,
+    payload?.data?.media,
+    payload?.media,
+    payload?.result?.base64,
+    payload?.response?.base64,
+  );
+}
+
+function extractResolvedMime(payload: any, fallback?: string) {
+  return pickFirstString(
+    payload?.mimetype,
+    payload?.mimeType,
+    payload?.data?.mimetype,
+    payload?.data?.mimeType,
+    payload?.result?.mimetype,
+    payload?.response?.mimetype,
+    fallback,
+    "application/octet-stream",
+  );
+}
+
+function extractResolvedFileName(payload: any) {
+  return pickFirstString(
+    payload?.fileName,
+    payload?.filename,
+    payload?.data?.fileName,
+    payload?.data?.filename,
+    payload?.result?.fileName,
+    payload?.response?.fileName,
+  );
+}
+
+function payloadForMediaDownload(rawPayload: any) {
+  const data = rawPayload?.data || rawPayload;
+  const message = data?.message || rawPayload?.message || data;
+  const key = data?.key || rawPayload?.key;
+  return {
+    key,
+    message,
+    messageTimestamp: data?.messageTimestamp || rawPayload?.messageTimestamp,
+    pushName: data?.pushName || rawPayload?.pushName,
+  };
+}
+
+export async function resolveWhatsAppMedia(input: ResolveWhatsAppMediaInput) {
+  const provider = getWhatsAppProvider();
+  if (provider !== "evolution") {
+    throw new Error("Carregamento de mídia está disponível apenas com Evolution API neste momento.");
+  }
+
+  const { apiUrl, apiKey, instance } = getEvolutionConfig();
+  const messagePayload = payloadForMediaDownload(input.rawPayload);
+  const requestBodies = [
+    { message: messagePayload, convertToMp4: false },
+    { message: input.rawPayload, convertToMp4: false },
+    { ...messagePayload, convertToMp4: false },
+  ];
+
+  let lastError = "Não foi possível baixar a mídia pela Evolution API.";
+
+  for (const body of requestBodies) {
+    try {
+      const response = await fetch(`${apiUrl}/chat/getBase64FromMediaMessage/${instance}`, {
+        method: "POST",
+        headers: {
+          apikey: apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        lastError = payload?.response?.message || payload?.message || payload?.error || lastError;
+        continue;
+      }
+      const base64 = extractResolvedBase64(payload);
+      const mimetype = extractResolvedMime(payload, input.mimetype);
+      if (base64) {
+        const cleanBase64 = String(base64).includes(",") ? String(base64).split(",").pop() || "" : String(base64);
+        const cleanMime = String(mimetype || "application/octet-stream").replace(/;\s*/g, ";");
+        return {
+          mediaUrl: String(base64).startsWith("data:") ? String(base64) : `data:${cleanMime};base64,${cleanBase64}`,
+          mimetype: cleanMime,
+          fileName: extractResolvedFileName(payload),
+          payload,
+        };
+      }
+      lastError = "A Evolution respondeu, mas não retornou base64 da mídia.";
+    } catch (error: any) {
+      lastError = error?.message || lastError;
+    }
+  }
+
+  throw new Error(Array.isArray(lastError) ? lastError.join(" | ") : lastError);
+}

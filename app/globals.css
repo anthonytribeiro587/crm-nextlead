@@ -5785,3 +5785,590 @@ button:disabled {
     width: min(230px, calc(100vw - 28px));
   }
 }
+
+/* NextLead CRM — media preview, scrollbars and dashboard cleanup */
+:root {
+  scrollbar-color: rgba(56, 189, 248, .32) rgba(2, 6, 23, .14);
+  scrollbar-width: thin;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: rgba(2, 6, 23, .12);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(34, 211, 238, .45), rgba(99, 102, 241, .36));
+  border-radius: 999px;
+  border: 2px solid rgba(2, 6, 23, .42);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(34, 211, 238, .68), rgba(99, 102, 241, .58));
+}
+*::-webkit-scrollbar-corner { background: transparent; }
+
+.main {
+  overflow-x: hidden !important;
+  overflow-y: auto;
+}
+
+.dashboard-command-hero {
+  min-height: 150px;
+  margin-bottom: 14px;
+}
+.dashboard-command-hero h1 {
+  max-width: 760px;
+}
+.dashboard-command-actions {
+  align-items: center;
+  justify-content: flex-end;
+}
+.dashboard-command-actions .btn,
+.dashboard-command-actions .system-status {
+  white-space: nowrap;
+}
+.dashboard-metrics-clean {
+  margin-bottom: 14px;
+}
+.dashboard-metrics-clean .metric-card,
+.dashboard-metrics-clean .card {
+  min-height: 116px;
+}
+.dashboard-command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(360px, .88fr);
+  gap: 14px;
+  align-items: start;
+}
+.dashboard-side-stack {
+  display: grid;
+  gap: 14px;
+}
+.dashboard-priority-panel,
+.dashboard-compact-panel {
+  min-height: 0 !important;
+}
+.dashboard-priority-panel {
+  display: grid;
+  gap: 16px;
+}
+.dashboard-priority-block {
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, .10);
+}
+.dashboard-priority-block h3 {
+  margin-bottom: 8px;
+  color: #e8f2ff;
+}
+.dashboard-compact-panel {
+  padding: 16px;
+}
+.dashboard-compact-panel .section-headline,
+.dashboard-priority-panel .section-headline {
+  align-items: flex-start;
+}
+.dashboard-compact-panel .compact-list-pro {
+  margin-top: 8px;
+}
+.dashboard-panel-pro {
+  min-height: 0 !important;
+}
+
+.inbox-topbar {
+  margin-bottom: 12px !important;
+}
+.inbox-topbar h1 {
+  font-size: clamp(2rem, 2.65vw, 3rem) !important;
+}
+.inbox-topbar .description {
+  max-width: 680px;
+}
+.inbox-pro {
+  height: min(760px, calc(100dvh - 184px)) !important;
+  min-height: 560px !important;
+}
+.chat-head-pro {
+  min-height: 72px !important;
+}
+.messages-pro {
+  padding: 14px 20px !important;
+}
+.whatsapp-composer {
+  min-height: 68px !important;
+  border-top: 1px solid rgba(148, 163, 184, .12) !important;
+}
+.whatsapp-composer .composer-input {
+  overflow-y: auto;
+}
+.message-media-link {
+  display: block;
+  color: inherit;
+}
+.message-file-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: min(360px, 100%);
+  padding: 9px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, .34);
+  border: 1px solid rgba(255, 255, 255, .12);
+}
+.message-file-card-pending {
+  background: rgba(15, 23, 42, .72);
+  border-color: rgba(34, 211, 238, .18);
+}
+.message-file-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .10);
+  font-size: 1.1rem;
+}
+.message-file-card div:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.message-file-card strong,
+.message-file-card span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.message-file-card span {
+  color: rgba(226, 232, 240, .72);
+  font-size: .78rem;
+}
+.message-file-card a,
+.message-file-card button {
+  border: 1px solid rgba(34, 211, 238, .28);
+  border-radius: 999px;
+  background: rgba(8, 145, 178, .16);
+  color: #e8fbff;
+  font-weight: 900;
+  font-size: .75rem;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+.message-file-card button:disabled {
+  opacity: .58;
+  cursor: wait;
+}
+.message-audio {
+  filter: saturate(.95);
+}
+
+@media (max-width: 1180px) {
+  .dashboard-command-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-side-stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dashboard-side-stack .dashboard-compact-panel:last-child {
+    grid-column: 1 / -1;
+  }
+  .inbox-pro {
+    height: min(760px, calc(100dvh - 174px)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .main {
+    overflow: visible !important;
+  }
+  .dashboard-command-hero {
+    min-height: 0;
+  }
+  .dashboard-command-actions {
+    justify-content: flex-start;
+  }
+  .dashboard-metrics-clean {
+    grid-template-columns: 1fr !important;
+  }
+  .dashboard-side-stack {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-priority-panel,
+  .dashboard-compact-panel {
+    padding: 16px;
+  }
+  .inbox-pro {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .messages-pro {
+    padding: 14px 12px 112px !important;
+  }
+  .message-file-card {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+  .message-file-card a,
+  .message-file-card button {
+    grid-column: 1 / -1;
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* NextLead CRM — inbox mic, unread state, clean scrollbars and dashboard v2 */
+.unread-indicator {
+  width: 11px;
+  height: 11px;
+  display: inline-block;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, .12), 0 0 18px rgba(34, 197, 94, .55);
+}
+.thread-pro.whatsapp-thread.waiting-reply .thread-title-line strong,
+.thread-pro.whatsapp-thread.waiting-reply .thread-preview {
+  color: #f8fbff !important;
+  font-weight: 950;
+}
+.thread-pro.whatsapp-thread.waiting-reply:not(.active) {
+  background: rgba(34, 197, 94, .075) !important;
+  border-color: rgba(34, 197, 94, .12) !important;
+}
+.message-media-caption {
+  display: block;
+  margin-top: 2px;
+  color: rgba(226, 232, 240, .84);
+  font-size: .82rem;
+}
+.whatsapp-composer {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+.composer-plus,
+.composer-mic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(34, 211, 238, .30);
+  background: linear-gradient(135deg, rgba(109, 40, 217, .92), rgba(14, 165, 233, .92));
+  color: white;
+  box-shadow: 0 14px 38px rgba(14, 165, 233, .14);
+}
+.composer-mic {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  font-size: 1.02rem;
+  font-weight: 950;
+  cursor: pointer;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+.composer-mic:hover,
+.composer-plus:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.composer-mic.recording {
+  width: auto;
+  min-width: 96px;
+  gap: 8px;
+  padding: 0 14px;
+  border-color: rgba(248, 113, 113, .55);
+  background: linear-gradient(135deg, rgba(220, 38, 38, .95), rgba(124, 58, 237, .88));
+  box-shadow: 0 0 0 5px rgba(239, 68, 68, .10), 0 18px 42px rgba(220, 38, 38, .22);
+}
+.composer-mic.recording span { font-size: .82rem; color: #fecaca; }
+.composer-mic.recording strong { font-size: .82rem; letter-spacing: .03em; }
+.attachment-menu-files-only { width: 230px; }
+.whatsapp-composer .composer-input {
+  overflow-y: hidden !important;
+  scrollbar-width: none !important;
+}
+.whatsapp-composer .composer-input::-webkit-scrollbar { display: none !important; }
+.messages-pro,
+.thread-stack,
+.lead-inspector,
+.inspector-scroll-area,
+.quick-contact-modal {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, .28) rgba(15, 23, 42, .08);
+}
+.messages-pro::-webkit-scrollbar,
+.thread-stack::-webkit-scrollbar,
+.lead-inspector::-webkit-scrollbar,
+.inspector-scroll-area::-webkit-scrollbar,
+.quick-contact-modal::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.messages-pro::-webkit-scrollbar-track,
+.thread-stack::-webkit-scrollbar-track,
+.lead-inspector::-webkit-scrollbar-track,
+.inspector-scroll-area::-webkit-scrollbar-track,
+.quick-contact-modal::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, .12);
+  border-radius: 999px;
+}
+.messages-pro::-webkit-scrollbar-thumb,
+.thread-stack::-webkit-scrollbar-thumb,
+.lead-inspector::-webkit-scrollbar-thumb,
+.inspector-scroll-area::-webkit-scrollbar-thumb,
+.quick-contact-modal::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, .32);
+  border: 2px solid rgba(2, 6, 23, .55);
+  border-radius: 999px;
+}
+.messages-pro::-webkit-scrollbar-thumb:hover,
+.thread-stack::-webkit-scrollbar-thumb:hover,
+.lead-inspector::-webkit-scrollbar-thumb:hover,
+.inspector-scroll-area::-webkit-scrollbar-thumb:hover,
+.quick-contact-modal::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, .50);
+}
+
+.dashboard-v2-hero {
+  min-height: 174px;
+  margin-bottom: 16px;
+  padding: 24px 26px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 390px);
+  gap: 18px;
+  align-items: stretch;
+  border-color: rgba(34, 211, 238, .16);
+  background:
+    radial-gradient(circle at 86% 0%, rgba(34, 211, 238, .12), transparent 30rem),
+    linear-gradient(145deg, rgba(16, 30, 56, .88), rgba(5, 11, 24, .82));
+}
+.dashboard-v2-hero h1 {
+  margin-bottom: 8px;
+  font-size: clamp(2.3rem, 3.6vw, 4.2rem);
+  line-height: .92;
+  letter-spacing: -.075em;
+}
+.dashboard-v2-hero-copy {
+  display: grid;
+  align-content: center;
+}
+.dashboard-v2-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.dashboard-v2-actions .btn,
+.dashboard-v2-actions .system-status {
+  min-height: 40px;
+}
+.dashboard-v2-next {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(34, 211, 238, .18);
+  background: rgba(2, 6, 23, .34);
+  transition: .18s ease;
+}
+.dashboard-v2-next:hover {
+  transform: translateY(-1px);
+  border-color: rgba(34, 211, 238, .34);
+  background: rgba(8, 145, 178, .12);
+}
+.dashboard-v2-next span {
+  color: var(--primary-2);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-weight: 950;
+  font-size: .70rem;
+}
+.dashboard-v2-next strong {
+  font-size: 1.28rem;
+  letter-spacing: -.04em;
+}
+.dashboard-v2-next small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+.dashboard-v2-metrics {
+  display: grid;
+  grid-template-columns: 1.25fr repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.dashboard-v2-metric {
+  min-height: 104px;
+  padding: 16px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  border: 1px solid rgba(148, 163, 184, .12);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(17, 28, 52, .82), rgba(5, 11, 24, .68));
+  box-shadow: 0 20px 52px rgba(0,0,0,.18);
+}
+.dashboard-v2-metric.primary {
+  border-color: rgba(34, 211, 238, .18);
+  background: linear-gradient(145deg, rgba(12, 74, 110, .22), rgba(17, 24, 39, .78));
+}
+.dashboard-v2-metric span {
+  color: var(--muted);
+  font-size: .82rem;
+}
+.dashboard-v2-metric strong {
+  font-size: clamp(1.45rem, 2.15vw, 2.05rem);
+  letter-spacing: -.055em;
+  color: #f8fbff;
+}
+.dashboard-v2-metric small {
+  color: var(--muted-2);
+  font-size: .78rem;
+}
+.dashboard-v2-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(330px, .9fr);
+  gap: 14px;
+  align-items: start;
+}
+.dashboard-v2-card {
+  min-height: 0 !important;
+  padding: 18px;
+}
+.dashboard-v2-card-main {
+  grid-row: span 2;
+}
+.dashboard-v2-card-wide {
+  grid-column: 1 / -1;
+}
+.dashboard-v2-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.dashboard-v2-section-head h2 { margin-bottom: 4px; }
+.dashboard-v2-list {
+  display: grid;
+  gap: 10px;
+}
+.dashboard-v2-list.compact { gap: 8px; }
+.dashboard-v2-row {
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, .10);
+  border-radius: 15px;
+  background: rgba(2, 6, 23, .42);
+  transition: .16s ease;
+}
+.dashboard-v2-row.urgent {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  border-color: rgba(34, 197, 94, .16);
+}
+.dashboard-v2-row:hover {
+  transform: translateY(-1px);
+  border-color: rgba(34, 211, 238, .24);
+  background: rgba(15, 23, 42, .72);
+}
+.dashboard-v2-row span:not(.dashboard-v2-avatar) {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.dashboard-v2-row strong,
+.dashboard-v2-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dashboard-v2-row strong { color: #f8fbff; }
+.dashboard-v2-row small { color: var(--muted); }
+.dashboard-v2-row em {
+  color: rgba(203, 213, 225, .72);
+  font-style: normal;
+  font-weight: 850;
+  white-space: nowrap;
+}
+.dashboard-v2-avatar {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--violet), var(--primary-2));
+  font-weight: 950;
+}
+.dashboard-v2-empty {
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border: 1px dashed rgba(148, 163, 184, .18);
+  border-radius: 16px;
+  color: rgba(226, 232, 240, .82);
+  background: rgba(2, 6, 23, .22);
+}
+.dashboard-v2-recent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 1180px) {
+  .dashboard-v2-hero { grid-template-columns: 1fr; }
+  .dashboard-v2-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-v2-metric.primary { grid-column: 1 / -1; }
+  .dashboard-v2-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .dashboard-v2-hero {
+    padding: 18px;
+    min-height: 0;
+  }
+  .dashboard-v2-hero h1 {
+    font-size: clamp(2rem, 11vw, 2.85rem) !important;
+  }
+  .dashboard-v2-actions .btn,
+  .dashboard-v2-actions .system-status {
+    flex: 1 1 130px;
+  }
+  .dashboard-v2-metrics {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-v2-metric.primary { grid-column: auto; }
+  .dashboard-v2-section-head {
+    display: grid;
+  }
+  .dashboard-v2-recent-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-v2-row.urgent,
+  .dashboard-v2-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dashboard-v2-row.urgent {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+  .dashboard-v2-row.urgent em {
+    grid-column: 2;
+  }
+  .whatsapp-composer {
+    grid-template-columns: auto minmax(0, 1fr) auto !important;
+  }
+  .composer-mic {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+  }
+  .composer-mic.recording {
+    min-width: 84px;
+    padding: 0 10px;
+  }
+}

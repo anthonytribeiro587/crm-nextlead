@@ -1,23 +1,20 @@
-# NextLead CRM — Inbox tempo quase real + mídias
+# NextLead CRM
 
-Pacote incremental focado no Inbox:
+Pacote: inbox com anexos separados, microfone estilo WhatsApp, leitura de novas mensagens, mídia recebida resolvida sob demanda e dashboard repaginada.
 
-- Atualização automática das conversas sem precisar F5.
-- Botão `+` do campo de mensagem agora abre anexos/mídia.
-- Envio de imagem, vídeo, áudio e arquivos via Evolution API.
-- Gravação de áudio pelo navegador e envio para o cliente.
-- Botão `+` da lista de conversas continua criando contato rápido.
-- Ajuste de altura do Inbox no desktop para o botão Enviar ficar visível.
+## Deploy
 
-## Arquivos alterados
+Suba os arquivos no GitHub e aguarde o deploy da Vercel.
 
-- `components/InboxClient.tsx`
-- `app/inbox/page.tsx`
-- `app/api/inbox/route.ts`
-- `app/api/whatsapp/send-media/route.ts`
-- `lib/whatsapp.ts`
-- `app/globals.css`
+## Testes principais
+
+1. Abra `/inbox`.
+2. Clique em uma conversa com etiqueta verde de mensagem nova: a bolinha deve sumir após abrir.
+3. Clique no `+` do campo de mensagem: deve aparecer somente anexo de imagem/vídeo/arquivo.
+4. Clique no botão de microfone: inicia gravação e mostra contador; clique novamente para enviar.
+5. Em áudio recebido, clique em `Carregar áudio` quando aparecer. O CRM tenta buscar o base64 pela Evolution para o player tocar corretamente.
+6. Abra `/` e confira a dashboard nova.
 
 ## Observações
 
-O envio de mídia usa a Evolution API. A visualização de mídias recebidas depende do webhook da Evolution entregar URL/base64 no payload. Se a Evolution não enviar a mídia no webhook, o CRM ainda mostra o marcador `[áudio]`, `[imagem]`, `[vídeo]` etc.
+Mídia recebida antiga só toca/abre se a Evolution conseguir resolver a mensagem via `getBase64FromMediaMessage`. Mídias enviadas pelo CRM continuam salvas no histórico como data URL.

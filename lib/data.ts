@@ -60,24 +60,19 @@ function firstString(...values: any[]) {
 function extractMediaUrl(raw: any): string | undefined {
   if (!raw) return undefined;
   const msg = raw?.message || raw?.data?.message || raw;
+
+  // Só consideramos URLs já resolvidas/salvas pelo CRM. URLs internas do WhatsApp
+  // (ex.: audioMessage.url) normalmente exigem descriptografia e resultam em player 0:00.
   const direct = firstString(
     raw?.mediaUrl,
     raw?.media_url,
-    raw?.url,
     raw?.fileUrl,
     raw?.file_url,
-    raw?.profilePictureUrl,
-    msg?.imageMessage?.url,
-    msg?.videoMessage?.url,
-    msg?.audioMessage?.url,
-    msg?.documentMessage?.url,
-    msg?.stickerMessage?.url,
-    msg?.image?.url,
-    msg?.video?.url,
-    msg?.audio?.url,
-    msg?.document?.url
+    raw?.resolvedMediaUrl,
+    raw?.downloadUrl
   );
   if (direct) return direct;
+
   const base64 = firstString(raw?.base64, raw?.mediaBase64, raw?.media_base64, msg?.base64);
   const mime = firstString(
     raw?.mimetype,
@@ -87,7 +82,10 @@ function extractMediaUrl(raw: any): string | undefined {
     msg?.audioMessage?.mimetype,
     msg?.documentMessage?.mimetype
   );
-  if (base64 && mime) return `data:${mime};base64,${base64}`;
+  if (base64 && mime) {
+    const cleanMime = String(mime).replace(/;\s*/g, ";");
+    return String(base64).startsWith("data:") ? String(base64) : `data:${cleanMime};base64,${base64}`;
+  }
   return undefined;
 }
 

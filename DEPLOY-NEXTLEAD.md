@@ -1,19 +1,31 @@
-# Deploy NextLead
+# Deploy NextLead CRM
 
 Commit sugerido:
 
 ```txt
-inbox realtime midia audio fix
+inbox mic media dashboard v2
 ```
 
-## Testes sugeridos
+Arquivos alterados neste pacote:
 
-1. Abrir `/inbox` no desktop.
-2. Ver se o botão Enviar aparece sem precisar rolar a página.
-3. Enviar mensagem de texto.
-4. Responder pelo WhatsApp e aguardar alguns segundos sem apertar F5.
-5. Clicar no `+` do campo de mensagem e enviar imagem/vídeo/arquivo.
-6. Clicar no `+` do campo de mensagem e testar gravação de áudio.
-7. Clicar no `+` da lista de conversas e criar contato rápido.
-8. Testar no mobile se o campo de mensagem continua acima da navbar.
+```txt
+app/page.tsx
+app/globals.css
+app/api/inbox/read/route.ts
+components/InboxClient.tsx
+lib/data.ts
+lib/whatsapp.ts
+app/api/whatsapp/media-resolve/route.ts
+README.md
+DEPLOY-NEXTLEAD.md
+```
+
+Não foi alterado:
+
+```txt
+Webhook principal
+Evolution setup
+Funil
+Ordens de serviço
+Schema do banco
 ```
