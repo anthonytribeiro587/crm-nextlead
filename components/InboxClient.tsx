@@ -269,6 +269,25 @@ function mediaButtonLabel(message: Message) {
   return "Carregar arquivo";
 }
 
+function latestContactTime(contact: Contact, allMessages: Message[]) {
+  const contactMessageTimes = allMessages
+    .filter((message) => message.contactId === contact.id)
+    .map((message) => messageSortTime(message))
+    .filter((time) => Number.isFinite(time));
+  const lastMessageTime = contactMessageTimes.length ? Math.max(...contactMessageTimes) : 0;
+  const contactTime = new Date(contact.lastMessageAt || 0).getTime();
+  const createdTime = new Date((contact as any).createdAt || 0).getTime();
+  return Math.max(lastMessageTime, Number.isFinite(contactTime) ? contactTime : 0, Number.isFinite(createdTime) ? createdTime : 0);
+}
+
+function pickMostRecentContactId(contactList: Contact[], allMessages: Message[], preferredId?: string) {
+  if (!contactList.length) return undefined;
+  if (preferredId && contactList.some((contact) => contact.id === preferredId)) return preferredId;
+  return contactList
+    .slice()
+    .sort((a, b) => latestContactTime(b, allMessages) - latestContactTime(a, allMessages))[0]?.id;
+}
+
 export function InboxClient({
   contacts: initialContacts,
   messages: initialMessages,
@@ -289,8 +308,10 @@ export function InboxClient({
   initialSelectedId?: string;
 }) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
-  const [selectedId, setSelectedId] = useState(initialContacts.find((contact) => contact.id === initialSelectedId)?.id || initialContacts[0]?.id);
   const [messages, setMessages] = useState<Message[]>(() => mergeMessagesForInbox(initialMessages));
+  const [selectedId, setSelectedId] = useState<string | undefined>(() =>
+    pickMostRecentContactId(initialContacts, mergeMessagesForInbox(initialMessages), initialSelectedId),
+  );
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
   const [pipelines, setPipelines] = useState<Pipeline[]>(initialPipelines);
   const [stages, setStages] = useState<Stage[]>(initialStages);
@@ -342,7 +363,7 @@ export function InboxClient({
   const audioStreamRef = useRef<MediaStream | null>(null);
   const router = useRouter();
 
-  const selected = contacts.find((contact) => contact.id === selectedId) || contacts[0];
+  const selected = contacts.find((contact) => contact.id === selectedId);
   const selectedDeal = useMemo(() => deals.find((deal) => deal.contactId === selected?.id), [deals, selected?.id]);
   const selectedStage = useMemo(() => stages.find((stage) => stage.id === selectedDeal?.stageId), [stages, selectedDeal?.stageId]);
   const pipelineById = useMemo(() => new Map(pipelines.map((pipeline) => [pipeline.id, pipeline])), [pipelines]);
@@ -482,7 +503,7 @@ export function InboxClient({
         const optimistic = current.filter((message) => String(message.id).startsWith("local-") && !serverKeys.has(messageDedupeKey(message)));
         return mergeMessagesForInbox([...nextMessages, ...optimistic]);
       });
-      setSelectedId((current) => (nextContacts.some((contact) => contact.id === current) ? current : nextContacts[0]?.id));
+      setSelectedId((current) => pickMostRecentContactId(nextContacts, nextMessages, current));
       setLastSyncAt(new Date().toISOString());
     } catch {
       // Polling é complementar; se falhar, mantém a tela atual.
@@ -497,11 +518,7 @@ export function InboxClient({
     setStages(initialStages);
     setActivities(initialActivities);
     setServiceOrders(initialServiceOrders);
-    setSelectedId((current) => {
-      const urlSelected = initialContacts.find((contact) => contact.id === initialSelectedId)?.id;
-      if (urlSelected) return urlSelected;
-      return initialContacts.some((contact) => contact.id === current) ? current : initialContacts[0]?.id;
-    });
+    setSelectedId((current) => pickMostRecentContactId(initialContacts, mergeMessagesForInbox(initialMessages), initialSelectedId || current));
   }, [initialActivities, initialContacts, initialDeals, initialMessages, initialPipelines, initialSelectedId, initialServiceOrders, initialStages]);
 
   useEffect(() => {
@@ -1379,14 +1396,15 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
               <span className="muted">{selected?.phone} • {selected?.company || "sem empresa"}</span>
             </div>
           </div>
-          <div className="chat-head-actions-pro whatsapp-chat-actions">
-            <label className="header-stage-field header-stage-whatsapp">
-              <span>Funil / etapa</span>
+          <div className="chat-head-actions-pro whatsapp-chat-actions conversation-command-center">
+            <label className="header-stage-field header-stage-whatsapp conversation-stage-card">
+              <span>Funil atual</span>
               <small>{selectedPipeline?.name || "Sem funil definido"}</small>
               <select
                 value={selectedDealStatus}
                 onChange={(event) => handleStageChange(event.target.value)}
                 disabled={!selectedDeal || Boolean(moving)}
+                aria-label="Alterar etapa do lead"
               >
                 <option value="" disabled>{selectedDeal ? "Selecione uma etapa" : "Sem oportunidade"}</option>
                 {selectedPipelineStages.map((stage) => (
@@ -1395,10 +1413,18 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
                 <option value="perdido">Perdido</option>
               </select>
             </label>
-            <button className="btn mini secondary os-head-button header-chip-button" onClick={() => openInspector("ordens")}>
-              {activeServiceOrders.length ? `${activeServiceOrders.length} OS aberta${activeServiceOrders.length > 1 ? "s" : ""}` : "OS"}
+            <button
+              className="lead-panel-trigger"
+              type="button"
+              onClick={() => openInspector(activeServiceOrders.length ? "ordens" : "acoes")}
+              aria-label="Abrir painel do lead"
+            >
+              <span className="lead-panel-trigger-icon">☰</span>
+              <span className="lead-panel-trigger-copy">
+                <strong>Painel do lead</strong>
+                <small>{activeServiceOrders.length ? `${activeServiceOrders.length} OS aberta${activeServiceOrders.length > 1 ? "s" : ""}` : "Ações, OS, proposta e IA"}</small>
+              </span>
             </button>
-            <button className="btn mini header-chip-button tools-head-button" onClick={() => openInspector("acoes")}>Painel</button>
           </div>
         </header>
 

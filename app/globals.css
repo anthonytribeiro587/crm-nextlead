@@ -7805,3 +7805,237 @@ button:disabled {
     width: 100% !important;
   }
 }
+
+/* NextLead CRM — Inbox command bar v12.4
+   Refinamento do cabeçalho da conversa: menos cara de botão solto, mais painel de comando. */
+.chat-head-pro {
+  gap: 18px !important;
+}
+
+.whatsapp-contact-title {
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.conversation-command-center {
+  flex: 0 0 auto !important;
+  display: grid !important;
+  grid-template-columns: minmax(230px, 300px) minmax(170px, 210px) !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.header-stage-whatsapp.conversation-stage-card {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 72px !important;
+  padding: 12px 14px !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(0, 216, 255, .24) !important;
+  background:
+    radial-gradient(circle at 16% 0%, rgba(0, 216, 255, .12), transparent 36%),
+    linear-gradient(135deg, rgba(15, 23, 42, .92), rgba(8, 13, 28, .94)) !important;
+  box-shadow: 0 18px 44px rgba(2, 6, 23, .22), inset 0 1px 0 rgba(255, 255, 255, .045) !important;
+}
+
+.header-stage-whatsapp.conversation-stage-card span {
+  margin-bottom: 3px !important;
+  color: #40e7ff !important;
+  letter-spacing: .18em !important;
+  font-size: .67rem !important;
+}
+
+.header-stage-whatsapp.conversation-stage-card small {
+  display: block !important;
+  max-width: 100% !important;
+  margin-bottom: 4px !important;
+  overflow: hidden !important;
+  color: rgba(226, 232, 240, .7) !important;
+  font-size: .72rem !important;
+  line-height: 1.1 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.header-stage-whatsapp.conversation-stage-card select {
+  width: 100% !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 24px 0 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: #f8fafc !important;
+  font-size: .95rem !important;
+  font-weight: 900 !important;
+  line-height: 1.1 !important;
+  box-shadow: none !important;
+}
+
+.lead-panel-trigger {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: 38px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-height: 72px !important;
+  padding: 11px 14px 11px 12px !important;
+  border: 1px solid rgba(96, 165, 250, .22) !important;
+  border-radius: 20px !important;
+  background:
+    linear-gradient(135deg, rgba(75, 85, 255, .88), rgba(10, 132, 255, .82)),
+    rgba(15, 23, 42, .9) !important;
+  color: #fff !important;
+  cursor: pointer !important;
+  box-shadow: 0 20px 46px rgba(37, 99, 235, .24), inset 0 1px 0 rgba(255, 255, 255, .18) !important;
+  transition: transform .16s ease, border-color .16s ease, filter .16s ease !important;
+  text-align: left !important;
+}
+
+.lead-panel-trigger:hover {
+  transform: translateY(-1px) !important;
+  border-color: rgba(125, 211, 252, .42) !important;
+  filter: brightness(1.04) !important;
+}
+
+.lead-panel-trigger-icon {
+  display: grid !important;
+  width: 38px !important;
+  height: 38px !important;
+  place-items: center !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, .14) !important;
+  color: #fff !important;
+  font-size: 1rem !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12) !important;
+}
+
+.lead-panel-trigger-copy {
+  display: grid !important;
+  min-width: 0 !important;
+  gap: 2px !important;
+}
+
+.lead-panel-trigger-copy strong {
+  overflow: hidden !important;
+  color: #fff !important;
+  font-size: .86rem !important;
+  font-weight: 950 !important;
+  line-height: 1.08 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.lead-panel-trigger-copy small {
+  overflow: hidden !important;
+  color: rgba(224, 242, 254, .86) !important;
+  font-size: .67rem !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.thread-pro.whatsapp-thread {
+  grid-template-columns: 52px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  min-height: 96px !important;
+  padding: 16px !important;
+  border-radius: 20px !important;
+}
+
+.thread-pro.whatsapp-thread .thread-copy {
+  min-width: 0 !important;
+  gap: 5px !important;
+}
+
+.thread-pro.whatsapp-thread .thread-title-line {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 8px !important;
+  align-items: baseline !important;
+}
+
+.thread-pro.whatsapp-thread .thread-title-line strong,
+.thread-pro.whatsapp-thread .thread-preview,
+.thread-pro.whatsapp-thread .thread-company-line {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.thread-pro.whatsapp-thread .thread-title-line small {
+  color: rgba(203, 213, 225, .68) !important;
+  font-size: .68rem !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+}
+
+.thread-meta-side {
+  align-self: stretch !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  min-width: 54px !important;
+}
+
+.thread-temp {
+  padding: 3px 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  font-size: .65rem !important;
+  font-weight: 900 !important;
+  letter-spacing: .02em !important;
+  text-transform: uppercase !important;
+}
+
+.unread-indicator {
+  width: 9px !important;
+  height: 9px !important;
+  border-radius: 999px !important;
+  background: #22d3ee !important;
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, .12), 0 0 18px rgba(34, 211, 238, .65) !important;
+}
+
+@media (max-width: 1220px) {
+  .conversation-command-center {
+    grid-template-columns: minmax(220px, 1fr) minmax(150px, 180px) !important;
+  }
+}
+
+@media (max-width: 980px) {
+  .conversation-command-center {
+    width: 100% !important;
+    grid-template-columns: 1fr !important;
+  }
+  .lead-panel-trigger {
+    min-height: 58px !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .chat-head-pro {
+    gap: 12px !important;
+  }
+  .conversation-command-center {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+  .header-stage-whatsapp.conversation-stage-card,
+  .lead-panel-trigger {
+    min-height: 58px !important;
+    border-radius: 18px !important;
+  }
+  .thread-pro.whatsapp-thread {
+    flex: 0 0 min(330px, 86vw) !important;
+    min-height: 92px !important;
+  }
+}

@@ -10,7 +10,8 @@ function normalizePhone(value: unknown) {
   let digits = onlyDigits(value);
   if (!digits) return "";
   if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) return digits;
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13))
+    return digits;
   if (digits.length === 10 || digits.length === 11) return `55${digits}`;
   return digits;
 }
@@ -28,20 +29,55 @@ function normalizeJid(jid: unknown) {
 }
 
 function phoneFromKey(key: any, item: any) {
-  const remoteJid = key?.remoteJid || item?.remoteJid || item?.jid;
-  const allowGroups = String(process.env.NEXTLEAD_SAVE_GROUP_MESSAGES || "false").toLowerCase() === "true";
+  const source = item?.data || item || {};
+  const nestedKey =
+    source?.key ||
+    source?.message?.key ||
+    source?.update?.key ||
+    source?.message?.message?.key ||
+    {};
+  const remoteJid =
+    key?.remoteJid ||
+    nestedKey?.remoteJid ||
+    source?.remoteJid ||
+    source?.jid ||
+    source?.chatId ||
+    source?.to ||
+    source?.from ||
+    source?.sender ||
+    source?.recipient;
+  const allowGroups =
+    String(
+      process.env.NEXTLEAD_SAVE_GROUP_MESSAGES || "false",
+    ).toLowerCase() === "true";
 
   if (isGroupJid(remoteJid)) {
     if (!allowGroups) return "";
-    return normalizeJid(key?.participantAlt || key?.participant || item?.participant || item?.sender);
+    return normalizeJid(
+      key?.participantAlt ||
+        key?.participant ||
+        nestedKey?.participant ||
+        source?.participant ||
+        source?.sender,
+    );
   }
 
-  return normalizeJid(remoteJid || key?.remoteJidAlt || item?.sender);
+  return normalizeJid(
+    remoteJid ||
+      key?.remoteJidAlt ||
+      nestedKey?.remoteJidAlt ||
+      source?.sender ||
+      source?.number,
+  );
 }
 
 function toDate(timestamp: unknown) {
   if (!timestamp) return new Date();
-  if (typeof timestamp === "object" && timestamp !== null && "low" in timestamp) {
+  if (
+    typeof timestamp === "object" &&
+    timestamp !== null &&
+    "low" in timestamp
+  ) {
     const low = Number((timestamp as any).low || 0);
     return new Date(low * 1000);
   }
@@ -75,14 +111,51 @@ function normalizeMessages(payload: any): any[] {
   const data = payload?.data;
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.messages)) return data.messages;
-  if (data?.key || data?.message) return [data];
-  if (payload?.key || payload?.message) return [payload];
+  if (Array.isArray(data?.updates)) return data.updates;
+  if (Array.isArray(payload?.messages)) return payload.messages;
+  if (Array.isArray(payload?.updates)) return payload.updates;
+
+  if (
+    data?.key ||
+    data?.message ||
+    data?.id ||
+    data?.messageId ||
+    data?.status !== undefined ||
+    data?.ack !== undefined ||
+    data?.update
+  ) {
+    return [data];
+  }
+
+  if (
+    payload?.key ||
+    payload?.message ||
+    payload?.id ||
+    payload?.messageId ||
+    payload?.status !== undefined ||
+    payload?.ack !== undefined ||
+    payload?.update
+  ) {
+    return [payload];
+  }
+
   return [];
 }
 
 function isMessageStatusUpdateEvent(event: string) {
-  const compact = String(event || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  return compact.includes("messagesupdate") || compact.includes("messagestatus") || compact.includes("statusupdate");
+  const compact = String(event || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  return (
+    compact.includes("messagesupdate") ||
+    compact.includes("messageupdate") ||
+    compact.includes("messagestatus") ||
+    compact.includes("statusupdate") ||
+    compact.includes("messagesack") ||
+    compact.includes("messageack") ||
+    compact.includes("receipt") ||
+    compact.includes("readreceipt")
+  );
 }
 
 function extractUpdateMessageId(update: any) {
@@ -90,9 +163,14 @@ function extractUpdateMessageId(update: any) {
     update?.key?.id ||
     update?.data?.key?.id ||
     update?.message?.key?.id ||
+    update?.message?.message?.key?.id ||
     update?.update?.key?.id ||
+    update?.data?.update?.key?.id ||
+    update?.data?.message?.key?.id ||
     update?.keyId ||
     update?.messageId ||
+    update?.message_id ||
+    update?.data?.id ||
     update?.id ||
     undefined
   );
@@ -101,12 +179,22 @@ function extractUpdateMessageId(update: any) {
 function extractRawStatus(update: any) {
   return (
     update?.status ??
+    update?.messageStatus ??
+    update?.statusMessage ??
+    update?.receipt?.status ??
     update?.update?.status ??
     update?.message?.status ??
+    update?.message?.message?.status ??
     update?.data?.status ??
+    update?.data?.messageStatus ??
     update?.data?.update?.status ??
+    update?.data?.message?.status ??
     update?.ack ??
     update?.update?.ack ??
+    update?.message?.ack ??
+    update?.data?.ack ??
+    update?.data?.update?.ack ??
+    update?.data?.message?.ack ??
     undefined
   );
 }
@@ -114,7 +202,12 @@ function extractRawStatus(update: any) {
 function normalizeMessageStatus(value: unknown) {
   if (value === undefined || value === null || value === "") return "";
 
-  const numeric = typeof value === "number" ? value : /^\d+$/.test(String(value)) ? Number(value) : NaN;
+  const numeric =
+    typeof value === "number"
+      ? value
+      : /^\d+$/.test(String(value))
+        ? Number(value)
+        : NaN;
   if (Number.isFinite(numeric)) {
     if (numeric <= 0) return "failed";
     if (numeric === 1 || numeric === 2) return "sent";
@@ -122,7 +215,10 @@ function normalizeMessageStatus(value: unknown) {
     if (numeric >= 4) return "read";
   }
 
-  const normalized = String(value).trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const normalized = String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   const map: Record<string, string> = {
     pending: "queued",
     queued: "queued",
@@ -142,7 +238,13 @@ function normalizeMessageStatus(value: unknown) {
 }
 
 function statusRank(status: string) {
-  const ranks: Record<string, number> = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 99 };
+  const ranks: Record<string, number> = {
+    queued: 0,
+    sent: 1,
+    delivered: 2,
+    read: 3,
+    failed: 99,
+  };
   return ranks[status] ?? 1;
 }
 
@@ -167,7 +269,12 @@ async function updateOutboundStatusFromEvolution(
     if (!error && data?.length) return true;
   }
 
-  const key = update?.key || update?.data?.key || update?.message?.key || update?.update?.key || {};
+  const key =
+    update?.key ||
+    update?.data?.key ||
+    update?.message?.key ||
+    update?.update?.key ||
+    {};
   const phone = phoneFromKey(key, update?.data || update);
   if (!phone) return false;
 
@@ -178,7 +285,9 @@ async function updateOutboundStatusFromEvolution(
     .in("phone", variants.length ? variants : [phone])
     .limit(10);
 
-  const contact = possibleContacts?.find((item: any) => item.phone === phone) || possibleContacts?.[0];
+  const contact =
+    possibleContacts?.find((item: any) => item.phone === phone) ||
+    possibleContacts?.[0];
   if (!contact?.id) return false;
 
   const { data: latest } = await supabase
@@ -192,7 +301,11 @@ async function updateOutboundStatusFromEvolution(
     .maybeSingle();
 
   if (!latest?.id) return false;
-  if (statusRank(String(latest.status || "")) > statusRank(status) && status !== "failed") return true;
+  if (
+    statusRank(String(latest.status || "")) > statusRank(status) &&
+    status !== "failed"
+  )
+    return true;
 
   const { error } = await supabase
     .from("messages")
@@ -202,7 +315,11 @@ async function updateOutboundStatusFromEvolution(
   return !error;
 }
 
-async function ensureDealForContact(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>, contactId: string, title: string) {
+async function ensureDealForContact(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  contactId: string,
+  title: string,
+) {
   const { data: existingDeal } = await supabase
     .from("deals")
     .select("id")
@@ -270,7 +387,10 @@ async function upsertContactSafe(
     }
 
     if (!result.error && result.data?.id) return result;
-    return { data: { id: existing.id, name: existing.name }, error: null } as any;
+    return {
+      data: { id: existing.id, name: existing.name },
+      error: null,
+    } as any;
   }
 
   const fullPayload = {
@@ -283,7 +403,11 @@ async function upsertContactSafe(
     updated_at: new Date().toISOString(),
   };
 
-  let result = await supabase.from("contacts").insert(fullPayload).select("id,name").single();
+  let result = await supabase
+    .from("contacts")
+    .insert(fullPayload)
+    .select("id,name")
+    .single();
 
   if (!result.error && result.data?.id) return result;
 
@@ -294,7 +418,11 @@ async function upsertContactSafe(
     company: null,
   };
 
-  result = await supabase.from("contacts").upsert(fallbackPayload, { onConflict: "phone" }).select("id,name").single();
+  result = await supabase
+    .from("contacts")
+    .upsert(fallbackPayload, { onConflict: "phone" })
+    .select("id,name")
+    .single();
   return result;
 }
 
@@ -304,7 +432,9 @@ async function saveMessageSafe(
   providerMessageId?: string,
 ) {
   const result = providerMessageId
-    ? await supabase.from("messages").upsert(record, { onConflict: "provider_message_id" })
+    ? await supabase
+        .from("messages")
+        .upsert(record, { onConflict: "provider_message_id" })
     : await supabase.from("messages").insert(record);
 
   if (!result.error) return result;
@@ -324,14 +454,33 @@ async function saveMessageSafe(
 
 export async function persistEvolutionWebhook(payload: any) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) return { persisted: false, reason: "Supabase não configurado." };
+  if (!supabase)
+    return { persisted: false, reason: "Supabase não configurado." };
 
-  await supabase.from("webhook_events").insert({ provider: "evolution", payload });
+  await supabase
+    .from("webhook_events")
+    .insert({ provider: "evolution", payload });
 
   const event = String(payload?.event || "").toLowerCase();
+  const candidates = normalizeMessages(payload);
+  const looksLikeStatusUpdate = candidates.some(
+    (item) =>
+      extractRawStatus(item) !== undefined &&
+      Boolean(
+        extractUpdateMessageId(item) ||
+        phoneFromKey(
+          item?.key ||
+            item?.data?.key ||
+            item?.message?.key ||
+            item?.update?.key ||
+            {},
+          item,
+        ),
+      ),
+  );
 
-  if (isMessageStatusUpdateEvent(event)) {
-    const updates = normalizeMessages(payload);
+  if (isMessageStatusUpdateEvent(event) || looksLikeStatusUpdate) {
+    const updates = candidates;
     let statusUpdates = 0;
 
     for (const update of updates) {
@@ -365,10 +514,20 @@ export async function persistEvolutionWebhook(payload: any) {
       continue;
     }
 
-    const pushName = item?.pushName || item?.verifiedBizName || item?.notifyName || phone;
-    const messageType = item?.messageType || item?.type || Object.keys(item?.message || {})[0] || "text";
+    const pushName =
+      item?.pushName || item?.verifiedBizName || item?.notifyName || phone;
+    const messageType =
+      item?.messageType ||
+      item?.type ||
+      Object.keys(item?.message || {})[0] ||
+      "text";
     const body = extractText(item, messageType);
-    const createdAt = toDate(item?.messageTimestamp || item?.timestamp || payload?.date_time || item?.date_time);
+    const createdAt = toDate(
+      item?.messageTimestamp ||
+        item?.timestamp ||
+        payload?.date_time ||
+        item?.date_time,
+    );
     const providerMessageId = key?.id || item?.id || undefined;
 
     const contactResult = await upsertContactSafe(supabase, {
@@ -378,14 +537,20 @@ export async function persistEvolutionWebhook(payload: any) {
     });
 
     if (contactResult.error || !contactResult.data?.id) {
-      errors.push(`contact:${phone}:${contactResult.error?.message || "sem id"}`);
+      errors.push(
+        `contact:${phone}:${contactResult.error?.message || "sem id"}`,
+      );
       continue;
     }
 
     const contact = contactResult.data;
 
     if (!fromMe) {
-      await ensureDealForContact(supabase, contact.id, `Atendimento WhatsApp - ${pushName || phone}`);
+      await ensureDealForContact(
+        supabase,
+        contact.id,
+        `Atendimento WhatsApp - ${pushName || phone}`,
+      );
     }
 
     const record = {
@@ -401,7 +566,11 @@ export async function persistEvolutionWebhook(payload: any) {
       updated_at: new Date().toISOString(),
     };
 
-    const messageResult = await saveMessageSafe(supabase, record, providerMessageId);
+    const messageResult = await saveMessageSafe(
+      supabase,
+      record,
+      providerMessageId,
+    );
     if (messageResult.error) {
       errors.push(`message:${phone}:${messageResult.error.message}`);
       continue;
@@ -410,5 +579,11 @@ export async function persistEvolutionWebhook(payload: any) {
     saved += 1;
   }
 
-  return { persisted: true, messages: saved, skipped, errors, event: payload?.event || null };
+  return {
+    persisted: true,
+    messages: saved,
+    skipped,
+    errors,
+    event: payload?.event || null,
+  };
 }
