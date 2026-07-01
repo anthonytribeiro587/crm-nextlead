@@ -49,53 +49,6 @@ function fallbackData(error?: string): CrmData {
   };
 }
 
-
-function firstString(...values: any[]) {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return undefined;
-}
-
-function extractMediaUrl(raw: any): string | undefined {
-  if (!raw) return undefined;
-  const msg = raw?.message || raw?.data?.message || raw;
-  const direct = firstString(
-    raw?.mediaUrl,
-    raw?.media_url,
-    raw?.url,
-    raw?.fileUrl,
-    raw?.file_url,
-    raw?.profilePictureUrl,
-    msg?.imageMessage?.url,
-    msg?.videoMessage?.url,
-    msg?.audioMessage?.url,
-    msg?.documentMessage?.url,
-    msg?.stickerMessage?.url,
-    msg?.image?.url,
-    msg?.video?.url,
-    msg?.audio?.url,
-    msg?.document?.url
-  );
-  if (direct) return direct;
-  const base64 = firstString(raw?.base64, raw?.mediaBase64, raw?.media_base64, msg?.base64);
-  const mime = firstString(
-    raw?.mimetype,
-    raw?.mimeType,
-    msg?.imageMessage?.mimetype,
-    msg?.videoMessage?.mimetype,
-    msg?.audioMessage?.mimetype,
-    msg?.documentMessage?.mimetype
-  );
-  if (base64 && mime) return `data:${mime};base64,${base64}`;
-  return undefined;
-}
-
-function extractFileName(raw: any): string | undefined {
-  const msg = raw?.message || raw?.data?.message || raw;
-  return firstString(raw?.fileName, raw?.filename, msg?.documentMessage?.fileName, msg?.document?.fileName);
-}
-
 function normalizeTags(tags: unknown): string[] {
   if (Array.isArray(tags)) return tags.map(String).filter(Boolean);
   return [];
@@ -133,7 +86,7 @@ export async function getCrmData(): Promise<CrmData> {
 
   const stagesPromise = supabase.from("pipeline_stages").select("id,title,position,color").order("position", { ascending: true });
   const dealsPromise = supabase.from("deals").select("id,contact_id,stage_id,title,value,status,expected_close,lost_reason,created_at").order("created_at", { ascending: false }).limit(200);
-  let messagesPromise: any = supabase.from("messages").select("id,contact_id,direction,body,type,status,provider_message_id,raw_payload,created_at").order("created_at", { ascending: true }).limit(500);
+  const messagesPromise = supabase.from("messages").select("id,contact_id,direction,body,status,provider_message_id,created_at").order("created_at", { ascending: true }).limit(500);
   const activitiesPromise = supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(300);
   const serviceOrdersPromise = supabase
     .from("service_orders")
@@ -226,10 +179,6 @@ export async function getCrmData(): Promise<CrmData> {
     body: message.body,
     status: message.status || "queued",
     providerMessageId: message.provider_message_id || undefined,
-    type: message.type || "text",
-    mediaUrl: extractMediaUrl(message.raw_payload),
-    fileName: extractFileName(message.raw_payload),
-    rawPayload: message.raw_payload || undefined,
     createdAt: message.created_at || new Date().toISOString(),
   }));
 

@@ -32,7 +32,6 @@ export interface Contact {
   tags: string[];
   lastMessageAt: string;
   notes?: string;
-  avatarUrl?: string;
 }
 
 export interface Deal {
@@ -55,10 +54,6 @@ export interface Message {
   status: MessageStatus;
   createdAt: string;
   providerMessageId?: string;
-  type?: string;
-  mediaUrl?: string;
-  fileName?: string;
-  rawPayload?: unknown;
 }
 
 export interface Activity {

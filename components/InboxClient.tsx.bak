@@ -132,30 +132,6 @@ function contactInitials(name?: string) {
   return (parts[0]?.slice(0, 1) || "?").toUpperCase();
 }
 
-function previewMessage(message?: Message) {
-  if (!message) return "Sem mensagens ainda";
-  if (message.mediaUrl && (message.type || "").includes("image")) return "📷 Imagem";
-  if ((message.type || "").includes("audio") || message.body.includes("[áudio]")) return "🎙️ Áudio";
-  if ((message.type || "").includes("video") || message.body.includes("[vídeo]")) return "🎬 Vídeo";
-  if ((message.type || "").includes("document")) return "📄 Documento";
-  return message.body.replace(/\s+/g, " ").trim() || "Mensagem";
-}
-
-function isMediaImage(message: Message) {
-  const type = String(message.type || "").toLowerCase();
-  return Boolean(message.mediaUrl && (type.includes("image") || message.mediaUrl.match(/\.(png|jpe?g|webp|gif)(\?|$)/i)));
-}
-
-function isMediaVideo(message: Message) {
-  const type = String(message.type || "").toLowerCase();
-  return Boolean(message.mediaUrl && (type.includes("video") || message.mediaUrl.match(/\.(mp4|webm|mov)(\?|$)/i)));
-}
-
-function isMediaAudio(message: Message) {
-  const type = String(message.type || "").toLowerCase();
-  return Boolean(message.mediaUrl && (type.includes("audio") || message.mediaUrl.match(/\.(mp3|ogg|opus|wav|m4a)(\?|$)/i)));
-}
-
 export function InboxClient({
   contacts: initialContacts,
   messages: initialMessages,
@@ -191,10 +167,6 @@ export function InboxClient({
   const [savingDeal, setSavingDeal] = useState(false);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>(initialServiceOrders);
-  const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>({});
-  const [showQuickContact, setShowQuickContact] = useState(false);
-  const [creatingQuickContact, setCreatingQuickContact] = useState(false);
-  const [quickContact, setQuickContact] = useState({ name: "", phone: "", company: "", message: "" });
   const [showOrderDraft, setShowOrderDraft] = useState(false);
   const [orderDraft, setOrderDraft] = useState({
     title: "",
@@ -242,16 +214,6 @@ export function InboxClient({
     }
     return map;
   }, [messages]);
-
-  const orderedContacts = useMemo(() => {
-    return contacts
-      .slice()
-      .sort((a, b) => {
-        const lastA = latestMessageByContact.get(a.id)?.createdAt || a.lastMessageAt;
-        const lastB = latestMessageByContact.get(b.id)?.createdAt || b.lastMessageAt;
-        return new Date(lastB).getTime() - new Date(lastA).getTime();
-      });
-  }, [contacts, latestMessageByContact]);
 
   const quickReplies = useMemo(() => {
     const name = firstName(selected?.name);
@@ -329,36 +291,6 @@ export function InboxClient({
       return initialContacts.some((contact) => contact.id === current) ? current : initialContacts[0]?.id;
     });
   }, [initialActivities, initialContacts, initialDeals, initialMessages, initialSelectedId, initialServiceOrders]);
-
-  useEffect(() => {
-    const missing = contacts
-      .filter((contact) => !avatarUrls[contact.id] && contact.phone)
-      .slice(0, 12);
-
-    if (!missing.length) return;
-
-    let cancelled = false;
-
-    missing.forEach(async (contact) => {
-      try {
-        const response = await fetch("/api/whatsapp/profile-picture", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ number: contact.phone }),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!cancelled && result?.url) {
-          setAvatarUrls((current) => ({ ...current, [contact.id]: result.url }));
-        }
-      } catch {
-        // Foto real é complementar. Se falhar, mantém iniciais do contato.
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [contacts, avatarUrls]);
 
   useEffect(() => {
     function refreshOnReturn() {
@@ -798,64 +730,6 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
     }
   }
 
-  async function createQuickContact() {
-    const name = quickContact.name.trim();
-    const phone = quickContact.phone.trim();
-    if (!name || !phone) {
-      setActionMessage("Informe nome e WhatsApp para criar o contato rápido.");
-      return;
-    }
-
-    setCreatingQuickContact(true);
-    setActionMessage(null);
-
-    try {
-      const response = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          phone,
-          company: quickContact.company,
-          source: "Manual",
-          interest: "Atendimento WhatsApp",
-          owner: "NextLead",
-          temperature: "morno",
-          value: 0,
-          tags: "manual,inbox",
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Erro ao criar contato.");
-
-      const contactId = result.contactId || `local-${Date.now()}`;
-      const now = new Date().toISOString();
-      const newContact: Contact = {
-        id: contactId,
-        name,
-        phone,
-        company: quickContact.company || undefined,
-        source: "Manual",
-        owner: "NextLead",
-        temperature: "morno",
-        tags: ["manual", "inbox"],
-        lastMessageAt: now,
-      };
-
-      setContacts((current) => [newContact, ...current.filter((contact) => contact.id !== contactId)]);
-      setSelectedId(contactId);
-      setDraft(quickContact.message.trim());
-      setQuickContact({ name: "", phone: "", company: "", message: "" });
-      setShowQuickContact(false);
-      setActionMessage("Contato criado. Revise a mensagem e clique em Enviar.");
-      router.refresh();
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : "Erro ao criar contato.");
-    } finally {
-      setCreatingQuickContact(false);
-    }
-  }
-
   async function sendMessage() {
     const body = draft.trim();
     if (!body || !selected) return;
@@ -916,55 +790,42 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
   return (
     <section className={`card inbox inbox-fixed inbox-pro ${showInspector ? "inspector-open" : ""}`}>
       <aside className="thread-list thread-list-pro">
-        <div className="thread-list-head whatsapp-thread-head">
+        <div className="thread-list-head">
           <div>
             <h2>Conversas</h2>
-            <span className="muted">WhatsApp centralizado</span>
+            <span className="muted">Atendimentos ativos</span>
           </div>
-          <button className="new-chat-button" onClick={() => setShowQuickContact(true)} aria-label="Novo contato rápido">+</button>
+          <span className="thread-count">{contacts.length}</span>
         </div>
 
-        <div className="thread-stack whatsapp-thread-stack">
-          {orderedContacts.map((contact) => {
-            const latest = latestMessageByContact.get(contact.id);
-            const waitingReply = latest?.direction === "inbound";
-            const avatarUrl = avatarUrls[contact.id] || contact.avatarUrl;
-            return (
-              <button
-                key={contact.id}
-                className={`thread thread-pro whatsapp-thread ${contact.id === selected?.id ? "active" : ""} ${waitingReply ? "waiting-reply" : ""}`}
-                onClick={() => {
-                  setSelectedId(contact.id);
-                  setActionMessage(null);
-                }}
-              >
-                <span className="avatar contact-photo-fallback">
-                  {avatarUrl ? <img src={avatarUrl} alt="" /> : contactInitials(contact.name)}
-                </span>
-                <span className="thread-copy">
-                  <span className="thread-title-line">
-                    <strong>{contact.name}</strong>
-                    {latest && <small>{shortDate(latest.createdAt)}</small>}
-                  </span>
-                  <span className="muted thread-preview">{previewMessage(latest).slice(0, 54)}</span>
-                  <span className="thread-company-line">{contact.company || contact.source}</span>
-                </span>
-                <span className="thread-meta-side">
-                  {waitingReply && <span className="unread-dot">novo</span>}
-                  <span className={`thread-temp ${contact.temperature}`}>{contact.temperature}</span>
-                </span>
-              </button>
-            );
-          })}
+        <div className="thread-stack">
+          {contacts.map((contact) => (
+            <button
+              key={contact.id}
+              className={`thread thread-pro ${contact.id === selected?.id ? "active" : ""}`}
+              onClick={() => {
+                setSelectedId(contact.id);
+                setActionMessage(null);
+              }}
+            >
+              <span className="avatar contact-photo-fallback">{contactInitials(contact.name)}</span>
+              <span className="thread-copy">
+                <strong>{contact.name}</strong>
+                <span className="muted">{latestMessageByContact.get(contact.id)?.body?.slice(0, 44) || contact.company || contact.source}</span>
+              </span>
+              <span className="thread-meta-side">
+                <span className={`thread-temp ${contact.temperature}`}>{contact.temperature}</span>
+                {latestMessageByContact.get(contact.id) && <small>{shortDate(latestMessageByContact.get(contact.id)!.createdAt)}</small>}
+              </span>
+            </button>
+          ))}
         </div>
       </aside>
 
       <div className="chat chat-fixed chat-pro">
         <header className="chat-head-pro">
           <div className="contact-title-block whatsapp-contact-title">
-            <span className="avatar contact-photo-large contact-photo-fallback">
-              {selected && (avatarUrls[selected.id] || selected.avatarUrl) ? <img src={avatarUrls[selected.id] || selected.avatarUrl} alt="" /> : contactInitials(selected?.name)}
-            </span>
+            <span className="avatar contact-photo-large contact-photo-fallback">{contactInitials(selected?.name)}</span>
             <div>
               <span className="eyebrow-small">Contato em atendimento</span>
               <h2>{selected?.name}</h2>
@@ -1000,14 +861,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
             </div>
           )}
           {threadMessages.map((message) => (
-            <div key={message.id} className={`message whatsapp-bubble ${message.direction === "outbound" ? "outbound" : ""} ${message.status === "failed" ? "failed" : ""}`}>
-              {isMediaImage(message) ? (
-                <img className="message-media-image" src={message.mediaUrl} alt={message.body || "Imagem recebida"} />
-              ) : isMediaVideo(message) ? (
-                <video className="message-media-image" src={message.mediaUrl} controls />
-              ) : isMediaAudio(message) ? (
-                <audio className="message-audio" src={message.mediaUrl} controls />
-              ) : null}
+            <div key={message.id} className={`message ${message.direction === "outbound" ? "outbound" : ""} ${message.status === "failed" ? "failed" : ""}`}>
               <span>{message.body}</span>
               <small>{shortDate(message.createdAt)} • {messageStatusLabel(message.status)}</small>
             </div>
@@ -1015,11 +869,10 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
           <div ref={messagesEndRef} />
         </div>
 
-        <footer className="composer composer-pro whatsapp-composer">
-          <button className="composer-plus" type="button" onClick={() => setShowQuickContact(true)} aria-label="Novo contato">+</button>
+        <footer className="composer composer-pro">
           <textarea
             className="input composer-input"
-            placeholder="Mensagem"
+            placeholder="Digite uma mensagem..."
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -1029,44 +882,9 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
               }
             }}
           />
-          <button className="btn send-round" onClick={sendMessage}>Enviar</button>
+          <button className="btn" onClick={sendMessage}>Enviar</button>
         </footer>
       </div>
-
-
-      {showQuickContact && (
-        <div className="modal-backdrop quick-contact-backdrop" onClick={() => setShowQuickContact(false)}>
-          <div className="modal-card quick-contact-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head">
-              <div>
-                <p className="eyebrow-small">Novo atendimento</p>
-                <h2>Contato rápido</h2>
-                <p className="muted">Crie um contato manual para iniciar uma conversa pelo WhatsApp.</p>
-              </div>
-              <button className="btn mini secondary" onClick={() => setShowQuickContact(false)}>Fechar</button>
-            </div>
-            <div className="form-grid compact-grid">
-              <label className="form-row">Nome
-                <input className="input" value={quickContact.name} onChange={(event) => setQuickContact((current) => ({ ...current, name: event.target.value }))} placeholder="Nome do contato" />
-              </label>
-              <label className="form-row">WhatsApp
-                <input className="input" value={quickContact.phone} onChange={(event) => setQuickContact((current) => ({ ...current, phone: event.target.value }))} placeholder="51999999999" />
-              </label>
-            </div>
-            <label className="form-row">Empresa / origem
-              <input className="input" value={quickContact.company} onChange={(event) => setQuickContact((current) => ({ ...current, company: event.target.value }))} placeholder="Empresa, indicação, Instagram..." />
-            </label>
-            <label className="form-row">Mensagem inicial opcional
-              <textarea className="input" value={quickContact.message} onChange={(event) => setQuickContact((current) => ({ ...current, message: event.target.value }))} placeholder="Digite um rascunho para já deixar pronto no chat." />
-            </label>
-            <div className="modal-actions">
-              <button className="btn" onClick={createQuickContact} disabled={creatingQuickContact}>
-                {creatingQuickContact ? "Criando..." : "Criar e abrir conversa"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showInspector && <button className="inspector-backdrop" aria-label="Fechar painel" onClick={() => setShowInspector(false)} />}
 

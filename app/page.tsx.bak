@@ -3,6 +3,7 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { ActivityList } from "@/components/ActivityList";
+import { LeadCaptureForm } from "@/components/LeadCaptureForm";
 import { MetricCard } from "@/components/MetricCard";
 import { getCrmData } from "@/lib/data";
 import { money, shortDate } from "@/lib/format";
@@ -213,17 +214,16 @@ export default async function DashboardPage() {
         </article>
       </section>
 
-      <section className="dashboard-lower-pro dashboard-lower-clean">
+      <section className="grid cols-2 dashboard-lower-pro">
+        <LeadCaptureForm />
         <article className="card dashboard-panel-pro dashboard-playbook">
           <p className="eyebrow-small">Processo sugerido</p>
           <h2>Rotina comercial diária</h2>
-          <p className="muted">Para cadastrar lead manual, use CRM &gt; Novo contato. Para iniciar conversa rápida, use o botão + no Inbox.</p>
           <div className="playbook-steps">
             <span>1. Responder leads sem resposta</span>
             <span>2. Concluir follow-ups atrasados</span>
-            <span>3. Atualizar etapa no funil</span>
-            <span>4. Enviar ou revisar propostas</span>
-            <span>5. Criar OS quando virar execução</span>
+            <span>3. Mover oportunidades no funil</span>
+            <span>4. Enviar propostas pendentes</span>
           </div>
         </article>
       </section>
