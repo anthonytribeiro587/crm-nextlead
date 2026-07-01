@@ -68,10 +68,10 @@ export const contacts: Contact[] = [
 ];
 
 export const deals: Deal[] = [
-  { id: "d1", contactId: "c1", title: "Landing Page Academia", value: 1200, stageId: "proposta", status: "aberto", expectedClose: "2026-06-28", createdAt: "2026-06-25T13:42:00.000Z" },
-  { id: "d2", contactId: "c2", title: "Landing Page Assistência", value: 900, stageId: "diagnostico", status: "aberto", expectedClose: "2026-07-02", createdAt: "2026-06-25T12:19:00.000Z" },
-  { id: "d3", contactId: "c3", title: "Landing Page Manutenções", value: 1500, stageId: "negociacao", status: "aberto", expectedClose: "2026-06-30", createdAt: "2026-06-24T20:30:00.000Z" },
-  { id: "d4", contactId: "c4", title: "Página móveis planejados", value: 1100, stageId: "contato", status: "aberto", expectedClose: "2026-07-05", createdAt: "2026-06-23T19:15:00.000Z" },
+  { id: "d1", contactId: "c1", pipelineId: "pipe-comercial", title: "Landing Page Academia", value: 1200, stageId: "proposta", status: "aberto", expectedClose: "2026-06-28", createdAt: "2026-06-25T13:42:00.000Z" },
+  { id: "d2", contactId: "c2", pipelineId: "pipe-comercial", title: "Landing Page Assistência", value: 900, stageId: "diagnostico", status: "aberto", expectedClose: "2026-07-02", createdAt: "2026-06-25T12:19:00.000Z" },
+  { id: "d3", contactId: "c3", pipelineId: "pipe-comercial", title: "Landing Page Manutenções", value: 1500, stageId: "negociacao", status: "aberto", expectedClose: "2026-06-30", createdAt: "2026-06-24T20:30:00.000Z" },
+  { id: "d4", contactId: "c4", pipelineId: "pipe-comercial", title: "Página móveis planejados", value: 1100, stageId: "contato", status: "aberto", expectedClose: "2026-07-05", createdAt: "2026-06-23T19:15:00.000Z" },
 ];
 
 export const messages: Message[] = [

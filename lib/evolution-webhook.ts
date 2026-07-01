@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "./supabase-admin";
 import { brazilPhoneVariants } from "./format";
+import { ensureDefaultPipeline } from "./default-pipeline";
 
 function onlyDigits(value: unknown) {
   return String(value || "").replace(/\D/g, "");
@@ -90,18 +91,13 @@ async function ensureDealForContact(supabase: NonNullable<ReturnType<typeof getS
 
   if (existingDeal?.id) return;
 
-  const { data: firstStage } = await supabase
-    .from("pipeline_stages")
-    .select("id")
-    .order("position", { ascending: true })
-    .limit(1)
-    .single();
+  const firstStageId = await ensureDefaultPipeline(supabase);
 
-  if (!firstStage?.id) return;
+  if (!firstStageId) return;
 
   await supabase.from("deals").insert({
     contact_id: contactId,
-    stage_id: firstStage.id,
+    stage_id: firstStageId,
     title,
     status: "aberto",
     value: 0,

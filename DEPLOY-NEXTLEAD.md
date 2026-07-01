@@ -38,3 +38,12 @@ Depois do deploy, testar:
 4. Editar nomes e cores das etapas.
 5. Adicionar/remover etapas.
 6. Criar pipeline e trocar no seletor.
+
+## Patch v12 obrigatório para múltiplos pipelines no Inbox
+
+1. Suba o código atualizado.
+2. No Supabase, rode `scripts/migration-v5-deals-pipeline-context.sql` depois da migration v4.
+3. Faça o deploy na Vercel.
+4. Teste um lead em pipeline personalizado pelo `/inbox`.
+
+O objetivo é impedir que o Inbox use etapas fixas do Comercial quando a oportunidade estiver em outro pipeline.

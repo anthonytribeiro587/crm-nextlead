@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { persistEvolutionWebhook } from "@/lib/evolution-webhook";
+import { ensureDefaultPipeline } from "@/lib/default-pipeline";
 
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status });
@@ -83,17 +84,12 @@ async function persistMetaWebhook(payload: any) {
           .maybeSingle();
 
         if (!existingDeal) {
-          const { data: firstStage } = await supabase
-            .from("pipeline_stages")
-            .select("id")
-            .order("position", { ascending: true })
-            .limit(1)
-            .single();
+          const firstStageId = await ensureDefaultPipeline(supabase);
 
-          if (firstStage?.id) {
+          if (firstStageId) {
             await supabase.from("deals").insert({
               contact_id: contact.id,
-              stage_id: firstStage.id,
+              stage_id: firstStageId,
               title: `Atendimento WhatsApp - ${profileName || from}`,
               status: "aberto",
               value: 0,

@@ -198,8 +198,13 @@ export function KanbanBoard({
   }
 
   function moveDeal(dealId: string, stageId: string) {
+    const nextStage = stages.find((stage) => stage.id === stageId);
     setDeals((current) =>
-      current.map((deal) => (deal.id === dealId ? { ...deal, stageId, status: "aberto", lostReason: undefined } : deal)),
+      current.map((deal) =>
+        deal.id === dealId
+          ? { ...deal, pipelineId: nextStage?.pipelineId || deal.pipelineId, stageId, status: "aberto", lostReason: undefined }
+          : deal,
+      ),
     );
     patchDeal(dealId, { stageId, status: "aberto", lostReason: null })
       .then(() => {
@@ -247,6 +252,7 @@ export function KanbanBoard({
                 title: editing.title,
                 value: Number(editing.value || 0),
                 expectedClose: editing.expectedClose || undefined,
+                pipelineId: stages.find((stage) => stage.id === editing.stageId)?.pipelineId || deal.pipelineId,
                 stageId: editing.stageId,
                 status: editing.status,
                 lostReason: editing.status === "perdido" ? editing.lostReason || undefined : undefined,
@@ -318,7 +324,8 @@ export function KanbanBoard({
   }
 
   async function markAsWon(deal: Deal) {
-    setDeals((current) => current.map((item) => (item.id === deal.id ? { ...item, status: "ganho", stageId: closedStageId } : item)));
+    const closedStage = stages.find((stage) => stage.id === closedStageId);
+    setDeals((current) => current.map((item) => (item.id === deal.id ? { ...item, pipelineId: closedStage?.pipelineId || item.pipelineId, status: "ganho", stageId: closedStageId } : item)));
     patchDeal(deal.id, { status: "ganho", stageId: closedStageId })
       .then(() => router.refresh())
       .catch(() => setMessage("Não consegui marcar como fechado."));

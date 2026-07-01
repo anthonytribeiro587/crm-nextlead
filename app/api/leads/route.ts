@@ -216,8 +216,6 @@ export async function POST(request: NextRequest) {
   let dealId = existingDeal?.id || null;
 
   const dealPayload = {
-    contact_id: contact.id,
-    stage_id: firstStageId,
     title: interest,
     value,
     source,
@@ -227,6 +225,9 @@ export async function POST(request: NextRequest) {
   };
 
   if (existingDeal) {
+    // Não troca a etapa/funil de uma oportunidade já aberta.
+    // Assim um lead que foi movido para Pós-venda, OS ou outro pipeline não volta
+    // para o funil comercial só porque entrou novo formulário/mensagem.
     const { error: dealUpdateError } = await supabase
       .from("deals")
       .update(dealPayload)
@@ -238,7 +239,11 @@ export async function POST(request: NextRequest) {
   } else {
     const { data: deal, error: dealError } = await supabase
       .from("deals")
-      .insert(dealPayload)
+      .insert({
+        ...dealPayload,
+        contact_id: contact.id,
+        stage_id: firstStageId,
+      })
       .select("id")
       .single();
 

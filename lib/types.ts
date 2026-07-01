@@ -48,6 +48,7 @@ export interface Deal {
   contactId: string;
   title: string;
   value: number;
+  pipelineId?: string;
   stageId: string;
   status: DealStatus;
   expectedClose?: string;

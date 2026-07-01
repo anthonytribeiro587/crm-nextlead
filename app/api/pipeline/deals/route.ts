@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       deal: {
         id: `demo-deal-${Date.now()}`,
         contactId,
+        pipelineId: String(payload.pipelineId || payload.pipeline_id || "") || undefined,
         stageId,
         title,
         value: parseMoney(payload.value) || 0,
@@ -52,6 +53,16 @@ export async function POST(request: NextRequest) {
 
   const value = parseMoney(payload.value) || 0;
   const expectedClose = cleanDate(payload.expectedClose ?? payload.expected_close);
+
+  const { data: stage, error: stageError } = await supabase
+    .from("pipeline_stages")
+    .select("id,pipeline_id,title")
+    .eq("id", stageId)
+    .maybeSingle();
+
+  if (stageError || !stage) {
+    return NextResponse.json({ error: "Etapa inválida ou inexistente." }, { status: 400 });
+  }
 
   const insert: Record<string, any> = {
     contact_id: contactId,
@@ -81,6 +92,7 @@ export async function POST(request: NextRequest) {
     deal: {
       id: deal.id,
       contactId: deal.contact_id,
+      pipelineId: stage.pipeline_id || undefined,
       stageId: deal.stage_id,
       title: deal.title,
       value: Number(deal.value || 0),
@@ -105,6 +117,22 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, demo: true });
   }
 
+  let selectedStage: { id: string; pipeline_id?: string; title?: string } | null = null;
+
+  if (stageId) {
+    const { data: stage, error: stageError } = await supabase
+      .from("pipeline_stages")
+      .select("id,pipeline_id,title")
+      .eq("id", stageId)
+      .maybeSingle();
+
+    if (stageError || !stage) {
+      return NextResponse.json({ error: "Etapa inválida ou inexistente." }, { status: 400 });
+    }
+
+    selectedStage = stage;
+  }
+
   const update: Record<string, any> = { updated_at: new Date().toISOString() };
   if (stageId) update.stage_id = stageId;
   if (status) {
@@ -124,7 +152,7 @@ export async function PATCH(request: NextRequest) {
     .from("deals")
     .update(update)
     .eq("id", dealId)
-    .select("id,contact_id,title,value,status,stage_id")
+    .select("id,contact_id,title,value,status,stage_id,expected_close,lost_reason,created_at")
     .single();
 
   if (error) {
@@ -140,8 +168,7 @@ export async function PATCH(request: NextRequest) {
     if (status === "perdido") eventTitle = lostReason ? `Oportunidade perdida: ${String(lostReason).slice(0, 80)}` : "Oportunidade marcada como perdida";
     else if (status === "ganho") eventTitle = "Oportunidade marcada como fechada";
     else if (stageId) {
-      const { data: stage } = await supabase.from("pipeline_stages").select("title").eq("id", stageId).maybeSingle();
-      eventTitle = `Etapa alterada para ${stage?.title || "nova etapa"}`;
+      eventTitle = `Etapa alterada para ${selectedStage?.title || "nova etapa"}`;
     } else if (title !== undefined || value !== undefined || expectedClose !== undefined) {
       eventTitle = "Oportunidade editada";
     }
@@ -149,5 +176,21 @@ export async function PATCH(request: NextRequest) {
     await logCommercialActivity(supabase, { contactId: deal.contact_id, title: eventTitle, done: true });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    deal: deal
+      ? {
+          id: deal.id,
+          contactId: deal.contact_id,
+          pipelineId: selectedStage?.pipeline_id || undefined,
+          stageId: deal.stage_id,
+          title: deal.title,
+          value: Number(deal.value || 0),
+          status: deal.status || "aberto",
+          expectedClose: deal.expected_close || undefined,
+          lostReason: deal.lost_reason || undefined,
+          createdAt: deal.created_at || new Date().toISOString(),
+        }
+      : undefined,
+  });
 }

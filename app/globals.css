@@ -7487,3 +7487,13 @@ button:disabled {
     width: 100%;
   }
 }
+
+/* NextLead CRM — ajuste v12: Inbox respeita o funil da oportunidade */
+.header-stage-field small {
+  color: rgba(226, 232, 240, .72);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.15;
+  text-transform: none;
+}

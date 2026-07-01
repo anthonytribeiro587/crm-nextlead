@@ -219,17 +219,23 @@ export async function getCrmData(): Promise<CrmData> {
     notes: contact.notes || undefined,
   }));
 
-  const deals: Deal[] = (dealsResult.data || []).map((deal: any) => ({
-    id: deal.id,
-    contactId: deal.contact_id,
-    title: deal.title,
-    value: Number(deal.value || 0),
-    stageId: deal.stage_id || stages[0]?.id || "",
-    status: deal.status || "aberto",
-    expectedClose: deal.expected_close || undefined,
-    lostReason: deal.lost_reason || undefined,
-    createdAt: deal.created_at || new Date().toISOString(),
-  }));
+  const stagePipelineById = new Map(stages.map((stage) => [stage.id, stage.pipelineId]));
+
+  const deals: Deal[] = (dealsResult.data || []).map((deal: any) => {
+    const stageId = deal.stage_id || stages[0]?.id || "";
+    return {
+      id: deal.id,
+      contactId: deal.contact_id,
+      title: deal.title,
+      value: Number(deal.value || 0),
+      pipelineId: deal.pipeline_id || stagePipelineById.get(stageId) || undefined,
+      stageId,
+      status: deal.status || "aberto",
+      expectedClose: deal.expected_close || undefined,
+      lostReason: deal.lost_reason || undefined,
+      createdAt: deal.created_at || new Date().toISOString(),
+    };
+  });
 
   const messages: Message[] = (messagesResult.data || []).map((message: any) => ({
     id: message.id,

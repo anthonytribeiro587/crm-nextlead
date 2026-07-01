@@ -47,6 +47,7 @@ create table if not exists contacts (
 create table if not exists deals (
   id uuid primary key default gen_random_uuid(),
   contact_id uuid not null references contacts(id) on delete cascade,
+  pipeline_id uuid references pipelines(id) on delete set null,
   stage_id uuid references pipeline_stages(id) on delete set null,
   title text not null,
   value numeric(12,2) not null default 0,
@@ -91,6 +92,7 @@ create table if not exists webhook_events (
 );
 
 create index if not exists idx_contacts_phone on contacts(phone);
+create index if not exists idx_deals_pipeline_id on deals(pipeline_id);
 create index if not exists idx_deals_stage_id on deals(stage_id);
 create index if not exists idx_deals_contact_id on deals(contact_id);
 create index if not exists idx_messages_contact_id_created on messages(contact_id, created_at desc);
@@ -99,6 +101,25 @@ create index if not exists idx_messages_provider_message_id on messages(provider
 insert into pipelines (id, name)
 values ('00000000-0000-0000-0000-000000000001', 'Funil principal')
 on conflict (id) do nothing;
+
+
+create or replace function sync_deal_pipeline_from_stage()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.stage_id is not null then
+    select pipeline_id into new.pipeline_id from pipeline_stages where id = new.stage_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_sync_deal_pipeline_from_stage on deals;
+create trigger trg_sync_deal_pipeline_from_stage
+before insert or update of stage_id on deals
+for each row
+execute function sync_deal_pipeline_from_stage();
 
 insert into pipeline_stages (id, pipeline_id, title, position, color) values
 ('00000000-0000-0000-0000-000000000101', '00000000-0000-0000-0000-000000000001', 'Novo lead', 1, '#3b82f6'),

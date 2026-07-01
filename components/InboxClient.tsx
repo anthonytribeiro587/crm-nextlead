@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import type { Activity, Contact, Deal, LeadTemperature, Message, ServiceOrder, ServiceOrderStatus, Stage } from "@/lib/types";
+import type { Activity, Contact, Deal, LeadTemperature, Message, Pipeline, ServiceOrder, ServiceOrderStatus, Stage } from "@/lib/types";
 import { money, shortDate } from "@/lib/format";
 
 function formatDateTimeLocal(date: Date) {
@@ -248,7 +248,8 @@ export function InboxClient({
   contacts: initialContacts,
   messages: initialMessages,
   deals: initialDeals,
-  stages,
+  pipelines: initialPipelines,
+  stages: initialStages,
   activities: initialActivities,
   serviceOrders: initialServiceOrders,
   initialSelectedId,
@@ -256,6 +257,7 @@ export function InboxClient({
   contacts: Contact[];
   messages: Message[];
   deals: Deal[];
+  pipelines: Pipeline[];
   stages: Stage[];
   activities: Activity[];
   serviceOrders: ServiceOrder[];
@@ -265,6 +267,8 @@ export function InboxClient({
   const [selectedId, setSelectedId] = useState(initialContacts.find((contact) => contact.id === initialSelectedId)?.id || initialContacts[0]?.id);
   const [messages, setMessages] = useState<Message[]>(() => mergeMessagesForInbox(initialMessages));
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
+  const [pipelines, setPipelines] = useState<Pipeline[]>(initialPipelines);
+  const [stages, setStages] = useState<Stage[]>(initialStages);
   const [activities, setActivities] = useState<Activity[]>(initialActivities);
   const [draft, setDraft] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -316,14 +320,24 @@ export function InboxClient({
   const selected = contacts.find((contact) => contact.id === selectedId) || contacts[0];
   const selectedDeal = useMemo(() => deals.find((deal) => deal.contactId === selected?.id), [deals, selected?.id]);
   const selectedStage = useMemo(() => stages.find((stage) => stage.id === selectedDeal?.stageId), [stages, selectedDeal?.stageId]);
+  const pipelineById = useMemo(() => new Map(pipelines.map((pipeline) => [pipeline.id, pipeline])), [pipelines]);
+  const selectedPipelineId = selectedDeal?.pipelineId || selectedStage?.pipelineId || stages[0]?.pipelineId || pipelines[0]?.id || "";
+  const selectedPipeline = selectedPipelineId ? pipelineById.get(selectedPipelineId) : undefined;
+  const selectedPipelineStages = useMemo(() => {
+    if (!selectedPipelineId) return [] as Stage[];
+    return stages
+      .filter((stage) => stage.pipelineId === selectedPipelineId || (!stage.pipelineId && stage.id === selectedDeal?.stageId))
+      .slice()
+      .sort((a, b) => a.order - b.order);
+  }, [selectedDeal?.stageId, selectedPipelineId, stages]);
   const selectedDealStatus = selectedDeal?.status === "perdido" ? "perdido" : selectedDeal?.stageId || "";
-  const targetStages = useMemo(() => {
-    const wanted = ["Contato feito", "Diagnóstico", "Proposta enviada", "Negociação", "Fechado"];
-    return wanted
-      .map((title) => stages.find((stage) => stage.title.toLowerCase() === title.toLowerCase()))
-      .filter(Boolean) as Stage[];
-  }, [stages]);
-  const proposalStage = useMemo(() => stages.find((stage) => stage.title.toLowerCase().includes("proposta")), [stages]);
+  const proposalStage = useMemo(() => {
+    const currentPipelineProposal = selectedPipelineStages.find((stage) => {
+      const title = stage.title.toLowerCase();
+      return title.includes("proposta") || title.includes("orçamento") || title.includes("orcamento");
+    });
+    return currentPipelineProposal;
+  }, [selectedPipelineStages]);
   const threadMessages = useMemo(() => {
     return mergeMessagesForInbox(messages.filter((message) => message.contactId === selected?.id));
   }, [messages, selected?.id]);
@@ -427,11 +441,15 @@ export function InboxClient({
       const nextContacts = result.contacts as Contact[];
       const nextMessages = mergeMessagesForInbox(result.messages as Message[]);
       const nextDeals = result.deals as Deal[];
+      const nextPipelines = (result.pipelines || []) as Pipeline[];
+      const nextStages = (result.stages || []) as Stage[];
       const nextActivities = result.activities as Activity[];
       const nextServiceOrders = result.serviceOrders as ServiceOrder[];
 
       setContacts(nextContacts);
       setDeals(nextDeals);
+      if (nextPipelines.length) setPipelines(nextPipelines);
+      if (nextStages.length) setStages(nextStages);
       setActivities(nextActivities);
       setServiceOrders(nextServiceOrders);
       setMessages((current) => {
@@ -450,6 +468,8 @@ export function InboxClient({
     setContacts(initialContacts);
     setMessages(mergeMessagesForInbox(initialMessages));
     setDeals(initialDeals);
+    setPipelines(initialPipelines);
+    setStages(initialStages);
     setActivities(initialActivities);
     setServiceOrders(initialServiceOrders);
     setSelectedId((current) => {
@@ -457,7 +477,7 @@ export function InboxClient({
       if (urlSelected) return urlSelected;
       return initialContacts.some((contact) => contact.id === current) ? current : initialContacts[0]?.id;
     });
-  }, [initialActivities, initialContacts, initialDeals, initialMessages, initialSelectedId, initialServiceOrders]);
+  }, [initialActivities, initialContacts, initialDeals, initialMessages, initialPipelines, initialSelectedId, initialServiceOrders, initialStages]);
 
   useEffect(() => {
     const missing = contacts
@@ -618,7 +638,7 @@ export function InboxClient({
       setDeals((current) =>
         current.map((deal) =>
           deal.id === selectedDeal.id
-            ? { ...deal, stageId: stage.id, status: isClosed ? "ganho" : "aberto", lostReason: undefined }
+            ? { ...deal, pipelineId: stage.pipelineId || deal.pipelineId, stageId: stage.id, status: isClosed ? "ganho" : "aberto", lostReason: undefined }
             : deal,
         ),
       );
@@ -673,8 +693,35 @@ export function InboxClient({
       return;
     }
 
-    const stage = targetStages.find((item) => item.id === value);
-    if (stage) moveSelectedDeal(stage);
+    const stage = selectedPipelineStages.find((item) => item.id === value);
+    if (!stage) {
+      setActionMessage("Esta etapa não pertence ao funil atual do lead. Use 'Mover de funil' para trocar de processo.");
+      return;
+    }
+
+    moveSelectedDeal(stage);
+  }
+
+  function handlePipelineChange(pipelineId: string) {
+    if (!selectedDeal) {
+      setActionMessage("Este contato ainda não tem oportunidade vinculada.");
+      return;
+    }
+
+    if (!pipelineId || pipelineId === selectedPipelineId) return;
+
+    const pipelineStages = stages
+      .filter((stage) => stage.pipelineId === pipelineId)
+      .slice()
+      .sort((a, b) => a.order - b.order);
+    const firstStage = pipelineStages[0];
+
+    if (!firstStage) {
+      setActionMessage("Esse funil ainda não tem etapas cadastradas.");
+      return;
+    }
+
+    moveSelectedDeal(firstStage);
   }
 
   async function updateTemperature(temperature: LeadTemperature) {
@@ -1092,7 +1139,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dealId: selectedDeal.id, stageId: proposalStage.id, status: "aberto", lostReason: null }),
         }).catch(() => null);
-        setDeals((current) => current.map((deal) => (deal.id === selectedDeal.id ? { ...deal, stageId: proposalStage.id, status: "aberto", lostReason: undefined } : deal)));
+        setDeals((current) => current.map((deal) => (deal.id === selectedDeal.id ? { ...deal, pipelineId: proposalStage.pipelineId || deal.pipelineId, stageId: proposalStage.id, status: "aberto", lostReason: undefined } : deal)));
         await logCommercialHistory("Proposta enviada pelo WhatsApp");
         setLastGeneratedProposal(null);
       }
@@ -1309,14 +1356,15 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
           </div>
           <div className="chat-head-actions-pro whatsapp-chat-actions">
             <label className="header-stage-field header-stage-whatsapp">
-              <span>Etapa atual</span>
+              <span>Funil / etapa</span>
+              <small>{selectedPipeline?.name || "Sem funil definido"}</small>
               <select
                 value={selectedDealStatus}
                 onChange={(event) => handleStageChange(event.target.value)}
                 disabled={!selectedDeal || Boolean(moving)}
               >
-                <option value="" disabled>Sem oportunidade</option>
-                {targetStages.map((stage) => (
+                <option value="" disabled>{selectedDeal ? "Selecione uma etapa" : "Sem oportunidade"}</option>
+                {selectedPipelineStages.map((stage) => (
                   <option key={stage.id} value={stage.id}>{stage.title}</option>
                 ))}
                 <option value="perdido">Perdido</option>
@@ -1494,6 +1542,21 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
             </label>
 
             <label className="action-field">
+              <span>Funil</span>
+              <select
+                className="mini-select"
+                value={selectedPipelineId}
+                onChange={(event) => handlePipelineChange(event.target.value)}
+                disabled={!selectedDeal || Boolean(moving)}
+              >
+                <option value="" disabled>Sem funil</option>
+                {pipelines.map((pipeline) => (
+                  <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="action-field">
               <span>Etapa</span>
               <select
                 className={`mini-select ${selectedDeal?.status === "perdido" ? "danger-select" : ""}`}
@@ -1501,8 +1564,8 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
                 onChange={(event) => handleStageChange(event.target.value)}
                 disabled={!selectedDeal || Boolean(moving)}
               >
-                <option value="" disabled>Sem oportunidade</option>
-                {targetStages.map((stage) => (
+                <option value="" disabled>{selectedDeal ? "Selecione uma etapa" : "Sem oportunidade"}</option>
+                {selectedPipelineStages.map((stage) => (
                   <option key={stage.id} value={stage.id}>{stage.title}</option>
                 ))}
                 <option value="perdido">Perdido</option>

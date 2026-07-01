@@ -38,3 +38,33 @@ scripts/migration-v4-multiple-pipelines.sql
 - Criação de pipeline permite editar etapas antes de salvar.
 - Cada etapa pode ter nome e cor próprios.
 - É possível adicionar, remover e reordenar etapas no modal de criação.
+
+## Ajuste v12 - Inbox respeitando o pipeline do lead
+
+- O select de etapa dentro do Inbox não usa mais uma lista fixa do funil comercial.
+- A etapa exibida agora vem do funil da oportunidade selecionada.
+- O cabeçalho do atendimento mostra `Funil / etapa`.
+- O painel lateral ganhou o campo `Funil`, permitindo mover a oportunidade para outro processo.
+- Ao trocar de funil, a oportunidade entra automaticamente na primeira etapa daquele pipeline.
+- O envio de proposta move o lead para a etapa de proposta/orçamento do próprio funil atual, quando existir.
+- Novas entradas vindas de formulário/WhatsApp não jogam uma oportunidade aberta de volta para o funil comercial.
+
+Antes de usar em produção com banco real, rode também:
+
+```sql
+scripts/migration-v5-deals-pipeline-context.sql
+```
+
+## Commit sugerido v12
+
+```txt
+inbox pipeline context v12
+```
+
+Depois do deploy, testar:
+1. Criar um novo pipeline em `/funil` com etapas diferentes do Comercial.
+2. Criar/mover uma oportunidade para esse pipeline.
+3. Abrir o lead no `/inbox`.
+4. Conferir se aparece o nome do funil correto no topo.
+5. Alterar a etapa dentro do Inbox e confirmar que só aparecem etapas daquele funil.
+6. Trocar o campo `Funil` no painel lateral e confirmar que o lead foi para a primeira etapa do novo pipeline.
