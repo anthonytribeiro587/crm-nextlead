@@ -9,19 +9,19 @@ export default async function FunilPage() {
   const { contacts, deals, stages } = await getCrmData();
 
   return (
-    <>
-      <div className="topbar">
+    <div className="pipeline-page-v2">
+      <div className="topbar pipeline-hero-v2">
         <div>
           <p className="eyebrow">Pipeline</p>
-          <h1>Funil comercial próprio.</h1>
-          <p className="description">Arraste oportunidades entre etapas, edite valor/previsão e acompanhe o pipeline por fase.</p>
+          <h1>Funil comercial.</h1>
+          <p className="description">Veja oportunidades por etapa, priorize o próximo contato e mova negócios sem perder o contexto.</p>
         </div>
         <div className="actions">
-          <button className="btn secondary">Exportar</button>
-          <Link className="btn" href="/#entrada-lead">Nova oportunidade</Link>
+          <Link className="btn secondary" href="/crm">Novo contato</Link>
+          <Link className="btn" href="/inbox">Abrir Inbox</Link>
         </div>
       </div>
       <KanbanBoard contacts={contacts} deals={deals} stages={stages} />
-    </>
+    </div>
   );
 }

@@ -1,31 +1,19 @@
-# Deploy NextLead CRM
+# NextLead CRM — Funil operacional v9
 
-Commit sugerido:
+Commit sugerido: `funil operacional visual v9`
 
-```txt
-inbox mic media dashboard v2
-```
+Alterações:
+- Funil com leitura mais operacional e menos poluída.
+- Resumo do pipeline reorganizado em KPIs compactos.
+- Filtros mais claros e opção Kanban/Lista.
+- Card de “próximo movimento” para priorizar atendimento.
+- Cards do Kanban mais compactos, com ações organizadas.
+- Preparação visual para o próximo módulo de pipelines por processo.
 
-Arquivos alterados neste pacote:
-
-```txt
-app/page.tsx
-app/globals.css
-app/api/inbox/read/route.ts
-components/InboxClient.tsx
-lib/data.ts
-lib/whatsapp.ts
-app/api/whatsapp/media-resolve/route.ts
-README.md
-DEPLOY-NEXTLEAD.md
-```
-
-Não foi alterado:
-
-```txt
-Webhook principal
-Evolution setup
-Funil
-Ordens de serviço
-Schema do banco
-```
+Depois do deploy, testar:
+1. Abrir `/funil`.
+2. Mover uma oportunidade entre etapas.
+3. Abrir atendimento pelo card.
+4. Editar valor/previsão.
+5. Alternar Kanban/Lista.
+6. Filtrar por responsável, temperatura e prazo.

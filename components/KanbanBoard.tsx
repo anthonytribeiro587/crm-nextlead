@@ -16,8 +16,10 @@ type EditingState = {
   lostReason: string;
 };
 
+type ViewMode = "board" | "list";
+
 const temperatureOptions: Array<{ value: "todos" | LeadTemperature; label: string }> = [
-  { value: "todos", label: "Todas" },
+  { value: "todos", label: "Todas temperaturas" },
   { value: "quente", label: "Quentes" },
   { value: "morno", label: "Mornos" },
   { value: "frio", label: "Frios" },
@@ -36,6 +38,32 @@ function daysSince(value?: string) {
   return Math.max(0, Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
+function formatDate(value?: string) {
+  if (!value) return "sem previsão";
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return "sem previsão";
+  return `${day}/${month}/${year}`;
+}
+
+function stageLabel(stages: Stage[], stageId: string) {
+  return stages.find((stage) => stage.id === stageId)?.title || "Sem etapa";
+}
+
+function sortByPriority(deals: Deal[], contactsById: Map<string, Contact>) {
+  const tempWeight: Record<LeadTemperature, number> = { quente: 0, morno: 1, frio: 2 };
+  return [...deals].sort((a, b) => {
+    const contactA = contactsById.get(a.contactId);
+    const contactB = contactsById.get(b.contactId);
+    const waitingA = daysSince(contactA?.lastMessageAt) || 0;
+    const waitingB = daysSince(contactB?.lastMessageAt) || 0;
+    const tempA = tempWeight[contactA?.temperature || "morno"];
+    const tempB = tempWeight[contactB?.temperature || "morno"];
+    if (tempA !== tempB) return tempA - tempB;
+    if (waitingA !== waitingB) return waitingB - waitingA;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+}
+
 export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, stages }: { contacts: Contact[]; deals: Deal[]; stages: Stage[] }) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
@@ -48,6 +76,7 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
   const [temperatureFilter, setTemperatureFilter] = useState<"todos" | LeadTemperature>("todos");
   const [ageFilter, setAgeFilter] = useState("todos");
   const [showLost, setShowLost] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("board");
   const router = useRouter();
 
   const contactsById = useMemo(() => new Map(contacts.map((contact) => [contact.id, contact])), [contacts]);
@@ -55,9 +84,7 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
   const firstStageId = stages[0]?.id || "";
   const owners = useMemo(() => {
     const preferred = ["Anthony", "Felipe"];
-    const current = contacts
-      .map((contact) => contact.owner || "NextLead")
-      .filter(Boolean);
+    const current = contacts.map((contact) => contact.owner || "NextLead").filter(Boolean);
 
     return Array.from(new Set([...preferred, ...current])).sort((a, b) => {
       const ai = preferred.indexOf(a);
@@ -89,10 +116,12 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
     });
   }, [ageFilter, contactsById, deals, ownerFilter, query, showLost, temperatureFilter]);
 
+  const priorityDeals = useMemo(() => sortByPriority(visibleDeals.filter((deal) => deal.status === "aberto"), contactsById), [contactsById, visibleDeals]);
   const pipelineValue = visibleDeals.filter((deal) => deal.status === "aberto").reduce((sum, deal) => sum + deal.value, 0);
   const staleDeals = visibleDeals.filter((deal) => (daysSince(contactsById.get(deal.contactId)?.lastMessageAt) || 0) >= 7).length;
-  const proposalDeals = visibleDeals.filter((deal) => stages.find((stage) => stage.id === deal.stageId)?.title.toLowerCase().includes("proposta")).length;
+  const proposalDeals = visibleDeals.filter((deal) => stageLabel(stages, deal.stageId).toLowerCase().includes("proposta")).length;
   const wonDeals = deals.filter((deal) => deal.status === "ganho").length;
+  const activeDealsCount = visibleDeals.filter((deal) => deal.status === "aberto").length;
 
   async function patchDeal(dealId: string, payload: Record<string, unknown>) {
     const response = await fetch("/api/pipeline/deals", {
@@ -108,13 +137,11 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
 
   function moveDeal(dealId: string, stageId: string) {
     setDeals((current) =>
-      current.map((deal) =>
-        deal.id === dealId ? { ...deal, stageId, status: "aberto", lostReason: undefined } : deal,
-      ),
+      current.map((deal) => (deal.id === dealId ? { ...deal, stageId, status: "aberto", lostReason: undefined } : deal)),
     );
     patchDeal(dealId, { stageId, status: "aberto", lostReason: null })
       .then(() => {
-        setMessage("Etapa atualizada.");
+        setMessage(`Movido para ${stageLabel(stages, stageId)}.`);
         router.refresh();
       })
       .catch(() => setMessage("Não consegui salvar a mudança de etapa."));
@@ -193,6 +220,15 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
       .catch(() => setMessage("Não consegui reabrir a oportunidade."));
   }
 
+  async function markAsLost(deal: Deal) {
+    const reason = window.prompt("Motivo da perda?", deal.lostReason || "Sem retorno");
+    if (reason === null) return;
+    setDeals((current) => current.map((item) => (item.id === deal.id ? { ...item, status: "perdido", lostReason: reason || "Sem motivo informado" } : item)));
+    patchDeal(deal.id, { status: "perdido", lostReason: reason || "Sem motivo informado" })
+      .then(() => router.refresh())
+      .catch(() => setMessage("Não consegui marcar como perdido."));
+  }
+
   async function deleteContact(contactId: string) {
     const contact = contactsById.get(contactId);
     const ok = window.confirm(`Excluir o lead ${contact?.name || "selecionado"}? Isso remove também a oportunidade do funil.`);
@@ -214,24 +250,61 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
     }
   }
 
+  function DealCard({ deal }: { deal: Deal }) {
+    const contact = contactsById.get(deal.contactId);
+    const idleDays = daysSince(contact?.lastMessageAt);
+    return (
+      <article
+        className={`deal-card deal-card-pro deal-card-pro-v2 ${deal.status === "perdido" ? "lost" : ""}`}
+        draggable
+        onDragStart={() => setDraggingId(deal.id)}
+        onDragEnd={() => setDraggingId(null)}
+      >
+        <div className="deal-card-topline">
+          <span className={`badge ${tempClass(contact?.temperature)}`}>{contact?.temperature || "morno"}</span>
+          {idleDays !== null && idleDays >= 3 ? <span className="idle-chip">{idleDays}d sem contato</span> : null}
+          {deal.status !== "aberto" && <span className={`badge status-${deal.status}`}>{deal.status}</span>}
+        </div>
+        <div className="deal-card-main-v2">
+          <strong>{deal.title}</strong>
+          <p className="muted">{contact?.name || "Lead"} • {contact?.company || "sem empresa"}</p>
+        </div>
+        <div className="deal-meta deal-meta-v2">
+          <span>{money(deal.value)}</span>
+          <span>{formatDate(deal.expectedClose)}</span>
+        </div>
+        <div className="deal-actions deal-actions-pro deal-actions-pro-v2">
+          <Link className="btn mini secondary" href={`/inbox?contact=${deal.contactId}`}>Abrir</Link>
+          <button type="button" className="btn mini secondary" onClick={() => openEditor(deal)}>Editar</button>
+          {deal.status === "perdido" ? (
+            <button type="button" className="btn mini secondary" onClick={() => reopenDeal(deal)}>Reabrir</button>
+          ) : (
+            <button type="button" className="btn mini secondary" onClick={() => markAsWon(deal)}>Fechar</button>
+          )}
+          <button type="button" className="btn mini danger" onClick={() => markAsLost(deal)}>Perder</button>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <>
-      <div className="pipeline-command card">
-        <div>
-          <p className="eyebrow-small">Visão comercial</p>
-          <h2>Funil organizado</h2>
-          <p className="muted">Filtre, mova oportunidades e abra o atendimento sem sair do pipeline.</p>
+      <div className="pipeline-command card pipeline-command-v2">
+        <div className="pipeline-command-main-v2">
+          <p className="eyebrow-small">Pipeline ativo</p>
+          <h2>Comercial NextLead</h2>
+          <p className="muted">Etapas de venda com foco em retorno rápido, proposta e fechamento.</p>
         </div>
-        <div className="pipeline-summary-inline" aria-label="Resumo do funil">
-          <span><strong>{visibleDeals.length}</strong> oportunidades</span>
-          <span><strong>{proposalDeals}</strong> propostas</span>
-          <span><strong>{staleDeals}</strong> paradas +7d</span>
-          <span><strong>{wonDeals}</strong> fechadas</span>
+        <div className="pipeline-kpis-v2" aria-label="Resumo do funil">
+          <span><strong>{activeDealsCount}</strong><small>ativas</small></span>
+          <span><strong>{proposalDeals}</strong><small>em proposta</small></span>
+          <span><strong>{staleDeals}</strong><small>paradas +7d</small></span>
+          <span><strong>{wonDeals}</strong><small>fechadas</small></span>
           <b>{money(pipelineValue)}</b>
         </div>
       </div>
 
-      <div className="pipeline-toolbar card">
+      <div className="pipeline-toolbar card pipeline-toolbar-v2">
         <input className="input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar lead, empresa, telefone..." />
         <select className="select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
           <option value="todos">Todos responsáveis</option>
@@ -246,85 +319,103 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
           <option value="14d">Parados +14 dias</option>
           <option value="sem-previsao">Sem previsão</option>
         </select>
+        <div className="pipeline-view-toggle-v2" aria-label="Modo de visualização">
+          <button type="button" className={viewMode === "board" ? "active" : ""} onClick={() => setViewMode("board")}>Kanban</button>
+          <button type="button" className={viewMode === "list" ? "active" : ""} onClick={() => setViewMode("list")}>Lista</button>
+        </div>
         <button type="button" className={`btn secondary ${showLost ? "active-filter" : ""}`} onClick={() => setShowLost((current) => !current)}>
-          {showLost ? "Ocultar perdidos" : "Mostrar perdidos"}
+          {showLost ? "Ocultar perdidos" : "Perdidos"}
         </button>
       </div>
 
       {message && <div className="inline-alert">{message}</div>}
 
-      <div className="pipeline pipeline-pro" aria-label="Funil de vendas">
-        {stages.map((stage) => {
-          const stageDeals = visibleDeals.filter((deal) => deal.stageId === stage.id);
-          const total = stageDeals.reduce((sum, deal) => sum + deal.value, 0);
+      <div className="pipeline-priority-strip-v2 card">
+        <div>
+          <p className="eyebrow-small">Próximo movimento</p>
+          <strong>{priorityDeals[0] ? priorityDeals[0].title : "Nenhuma oportunidade pendente"}</strong>
+          <span>{priorityDeals[0] ? `${contactsById.get(priorityDeals[0].contactId)?.name || "Lead"} • ${stageLabel(stages, priorityDeals[0].stageId)}` : "O funil está limpo para novos contatos."}</span>
+        </div>
+        {priorityDeals[0] && <Link className="btn secondary" href={`/inbox?contact=${priorityDeals[0].contactId}`}>Abrir atendimento</Link>}
+      </div>
 
-          return (
-            <section
-              key={stage.id}
-              className={`stage stage-pro ${draggingId ? "stage-drop-ready" : ""}`}
-              style={{ "--stage-color": stage.color } as React.CSSProperties}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={() => {
-                if (draggingId) moveDeal(draggingId, stage.id);
-                setDraggingId(null);
-              }}
-            >
-              <div className="stage-head stage-head-pro">
-                <div>
-                  <span className="stage-title">
-                    <span className="dot" style={{ background: stage.color }} />
-                    {stage.title}
-                  </span>
-                  <span className="stage-total">{money(total)}</span>
+      {viewMode === "board" ? (
+        <div className="pipeline pipeline-pro pipeline-pro-v2" aria-label="Funil de vendas">
+          {stages.map((stage) => {
+            const stageDeals = visibleDeals.filter((deal) => deal.stageId === stage.id);
+            const total = stageDeals.reduce((sum, deal) => sum + deal.value, 0);
+
+            return (
+              <section
+                key={stage.id}
+                className={`stage stage-pro stage-pro-v2 ${draggingId ? "stage-drop-ready" : ""}`}
+                style={{ "--stage-color": stage.color } as React.CSSProperties}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (draggingId) moveDeal(draggingId, stage.id);
+                  setDraggingId(null);
+                }}
+              >
+                <div className="stage-head stage-head-pro stage-head-pro-v2">
+                  <div>
+                    <span className="stage-title">
+                      <span className="dot" style={{ background: stage.color }} />
+                      {stage.title}
+                    </span>
+                    <span className="stage-total">{money(total)}</span>
+                  </div>
+                  <span className="badge">{stageDeals.length}</span>
                 </div>
-                <span className="badge">{stageDeals.length}</span>
-              </div>
 
-              <div className="stage-card-list">
-                {stageDeals.length === 0 && <div className="stage-empty">Sem oportunidades nesta etapa.</div>}
-                {stageDeals.map((deal) => {
-                  const contact = contactsById.get(deal.contactId);
-                  return (
-                    <article
-                      key={deal.id}
-                      className={`deal-card deal-card-pro ${deal.status === "perdido" ? "lost" : ""}`}
-                      draggable
-                      onDragStart={() => setDraggingId(deal.id)}
-                      onDragEnd={() => setDraggingId(null)}
-                    >
-                      <div className="deal-card-topline">
-                        <span className={`badge ${tempClass(contact?.temperature)}`}>{contact?.temperature || "morno"}</span>
-                        {deal.status !== "aberto" && <span className={`badge status-${deal.status}`}>{deal.status}</span>}
-                      </div>
-                      <div>
-                        <strong>{deal.title}</strong>
-                        <p className="muted">{contact?.name || "Lead"} • {contact?.company || "sem empresa"}</p>
-                      </div>
-                      <div className="deal-meta">
-                        <span>{money(deal.value)}</span>
-                        <span>{deal.expectedClose ? `Prev. ${deal.expectedClose.split("-").reverse().join("/")}` : "sem previsão"}</span>
-                      </div>
-                      {(() => {
-                        const idleDays = daysSince(contact?.lastMessageAt);
-                        return idleDays !== null && idleDays >= 3 ? <span className="idle-chip">sem contato há {idleDays}d</span> : null;
-                      })()}
-                      <div className="deal-actions deal-actions-pro">
-                        <Link className="btn mini secondary" href={`/inbox?contact=${deal.contactId}`}>Abrir</Link>
-                        <button type="button" className="btn mini secondary" onClick={() => openEditor(deal)}>Editar</button>
-                        {deal.status === "perdido" ? (
-                          <button type="button" className="btn mini secondary" onClick={() => reopenDeal(deal)}>Reabrir</button>
-                        ) : (
-                          <button type="button" className="btn mini secondary" onClick={() => markAsWon(deal)}>Fechar</button>
-                        )}
-                        <button type="button" className="btn mini danger" onClick={() => contact && deleteContact(contact.id)}>Excluir</button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
+                <div className="stage-card-list stage-card-list-v2">
+                  {stageDeals.length === 0 && <div className="stage-empty stage-empty-v2">Solte uma oportunidade aqui</div>}
+                  {stageDeals.map((deal) => <DealCard key={deal.id} deal={deal} />)}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="pipeline-list-view-v2 card" aria-label="Lista de oportunidades">
+          <div className="pipeline-list-head-v2">
+            <span>Oportunidade</span>
+            <span>Etapa</span>
+            <span>Responsável</span>
+            <span>Valor</span>
+            <span>Ação</span>
+          </div>
+          {visibleDeals.length === 0 ? (
+            <div className="stage-empty">Nenhuma oportunidade no filtro atual.</div>
+          ) : (
+            visibleDeals.map((deal) => {
+              const contact = contactsById.get(deal.contactId);
+              return (
+                <article key={deal.id} className="pipeline-list-row-v2">
+                  <div>
+                    <strong>{deal.title}</strong>
+                    <p>{contact?.name || "Lead"} • {contact?.company || "sem empresa"}</p>
+                  </div>
+                  <span>{stageLabel(stages, deal.stageId)}</span>
+                  <span>{contact?.owner || "NextLead"}</span>
+                  <b>{money(deal.value)}</b>
+                  <div>
+                    <Link className="btn mini secondary" href={`/inbox?contact=${deal.contactId}`}>Abrir</Link>
+                    <button type="button" className="btn mini secondary" onClick={() => openEditor(deal)}>Editar</button>
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      <div className="pipeline-custom-note-v2 card">
+        <div>
+          <p className="eyebrow-small">Próximo módulo</p>
+          <h2>Pipelines por processo</h2>
+          <p className="muted">Depois deste ajuste visual, o próximo passo é permitir pipelines como Comercial, Protótipos e OS, cada um com etapas próprias.</p>
+        </div>
+        <span>sem mexer no banco neste commit</span>
       </div>
 
       {editing && (
