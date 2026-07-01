@@ -24,3 +24,17 @@ Depois do deploy, testar:
 2. Rode `scripts/migration-v4-multiple-pipelines.sql` no Supabase.
 3. Faça deploy na Vercel.
 4. Teste `/funil`: criar pipeline, alternar pipeline, criar oportunidade e mover card.
+
+## Commit sugerido v11
+
+```txt
+funil pipelines editaveis v11
+```
+
+Depois do deploy, testar:
+1. Abrir `/funil`.
+2. Conferir se as colunas ficam lado a lado.
+3. Clicar em `+ Pipeline`.
+4. Editar nomes e cores das etapas.
+5. Adicionar/remover etapas.
+6. Criar pipeline e trocar no seletor.

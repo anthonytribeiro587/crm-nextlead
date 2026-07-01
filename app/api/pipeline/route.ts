@@ -10,16 +10,35 @@ function cleanName(value: unknown) {
   return name || "Novo pipeline";
 }
 
+function cleanStages(value: unknown, templateStages: Array<{ title: string; color: string }>) {
+  if (!Array.isArray(value)) return templateStages;
+
+  const stages = value
+    .map((item) => {
+      const title = String(item?.title || "").trim();
+      const color = String(item?.color || "#06b6d4").trim();
+      return {
+        title,
+        color: /^#[0-9a-f]{6}$/i.test(color) ? color : "#06b6d4",
+      };
+    })
+    .filter((stage) => stage.title.length > 0)
+    .slice(0, 12);
+
+  return stages.length ? stages : templateStages;
+}
+
 export async function POST(request: NextRequest) {
   const payload = await request.json().catch(() => ({}));
   const name = cleanName(payload.name);
   const templateKey = String(payload.template || "personalizado") as PipelineTemplateKey;
   const template = PIPELINE_TEMPLATES[templateKey] || PIPELINE_TEMPLATES.personalizado;
+  const selectedStages = cleanStages(payload.stages, template.stages);
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     const pipeline = { id: `demo-${Date.now()}`, name };
-    const stages = template.stages.map((stage, index) => ({
+    const stages = selectedStages.map((stage, index) => ({
       id: `demo-stage-${Date.now()}-${index}`,
       pipelineId: pipeline.id,
       title: stage.title,
@@ -39,7 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: pipelineError?.message || "Erro ao criar pipeline." }, { status: 500 });
   }
 
-  const stageRows = template.stages.map((stage, index) => ({
+  const stageRows = selectedStages.map((stage, index) => ({
     pipeline_id: pipeline.id,
     title: stage.title,
     position: index + 1,

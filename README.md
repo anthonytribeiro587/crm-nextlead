@@ -31,3 +31,10 @@ Antes de usar em produção, rode no Supabase:
 ```sql
 scripts/migration-v4-multiple-pipelines.sql
 ```
+
+## Ajuste v11 - Funil com pipelines editáveis
+
+- Kanban voltou a manter as colunas lado a lado com rolagem horizontal quando necessário.
+- Criação de pipeline permite editar etapas antes de salvar.
+- Cada etapa pode ter nome e cor próprios.
+- É possível adicionar, remover e reordenar etapas no modal de criação.

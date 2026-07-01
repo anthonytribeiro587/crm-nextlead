@@ -19,9 +19,15 @@ type EditingState = {
 
 type ViewMode = "board" | "list";
 
+type PipelineStageDraft = {
+  title: string;
+  color: string;
+};
+
 type NewPipelineState = {
   name: string;
   template: PipelineTemplateKey;
+  stages: PipelineStageDraft[];
 };
 
 type NewDealState = {
@@ -60,6 +66,22 @@ function formatDate(value?: string) {
 
 function stageLabel(stages: Stage[], stageId: string) {
   return stages.find((stage) => stage.id === stageId)?.title || "Sem etapa";
+}
+
+function templateStages(template: PipelineTemplateKey): PipelineStageDraft[] {
+  const selected = PIPELINE_TEMPLATES[template] || PIPELINE_TEMPLATES.personalizado;
+  return selected.stages.map((stage) => ({ title: stage.title, color: stage.color }));
+}
+
+function cleanStageDrafts(stages: PipelineStageDraft[]) {
+  const clean = stages
+    .map((stage) => ({
+      title: stage.title.trim(),
+      color: /^#[0-9a-f]{6}$/i.test(stage.color) ? stage.color : "#06b6d4",
+    }))
+    .filter((stage) => stage.title.length > 0);
+
+  return clean.length ? clean : templateStages("personalizado");
 }
 
 function sortByPriority(deals: Deal[], contactsById: Map<string, Contact>) {
@@ -251,7 +273,7 @@ export function KanbanBoard({
       const response = await fetch("/api/pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newPipeline),
+        body: JSON.stringify({ ...newPipeline, stages: cleanStageDrafts(newPipeline.stages) }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Erro ao criar pipeline.");
@@ -399,7 +421,7 @@ export function KanbanBoard({
             <select className="select pipeline-select" value={activePipeline?.id || ""} onChange={(event) => setActivePipelineId(event.target.value)}>
               {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
             </select>
-            <button type="button" className="btn secondary" onClick={() => setNewPipeline({ name: "Pipeline de Protótipos", template: "prototipos" })}>+ Pipeline</button>
+            <button type="button" className="btn secondary" onClick={() => setNewPipeline({ name: "Pipeline de Protótipos", template: "prototipos", stages: templateStages("prototipos") })}>+ Pipeline</button>
             <button type="button" className="btn" onClick={openNewDeal} disabled={!contacts.length || !firstStageId}>+ Oportunidade</button>
           </div>
           <p className="muted">Use pipelines separados para comercial, protótipos, pós-venda ou execução. Cada pipeline tem etapas próprias.</p>
@@ -534,14 +556,114 @@ export function KanbanBoard({
             </label>
             <label className="form-row" style={{ marginTop: 12 }}>
               Modelo inicial
-              <select className="select" value={newPipeline.template} onChange={(event) => setNewPipeline({ ...newPipeline, template: event.target.value as PipelineTemplateKey })}>
+              <select
+                className="select"
+                value={newPipeline.template}
+                onChange={(event) => {
+                  const template = event.target.value as PipelineTemplateKey;
+                  setNewPipeline({
+                    ...newPipeline,
+                    template,
+                    stages: templateStages(template),
+                  });
+                }}
+              >
                 {Object.entries(PIPELINE_TEMPLATES).map(([key, template]) => (
                   <option key={key} value={key}>{template.label}</option>
                 ))}
               </select>
             </label>
-            <div className="template-preview">
-              {PIPELINE_TEMPLATES[newPipeline.template].stages.map((stage) => <span key={stage.title}>{stage.title}</span>)}
+
+            <div className="stage-editor-block">
+              <div className="stage-editor-head">
+                <div>
+                  <strong>Etapas do processo</strong>
+                  <span>Edite nome, ordem e cor antes de criar.</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn mini secondary"
+                  onClick={() => setNewPipeline({
+                    ...newPipeline,
+                    stages: [...newPipeline.stages, { title: `Nova etapa ${newPipeline.stages.length + 1}`, color: "#06b6d4" }],
+                  })}
+                >
+                  + Etapa
+                </button>
+              </div>
+
+              <div className="stage-editor-list">
+                {newPipeline.stages.map((stage, index) => (
+                  <div className="stage-editor-row" key={`${stage.title}-${index}`}>
+                    <span className="stage-editor-number">{index + 1}</span>
+                    <input
+                      className="stage-color-input"
+                      type="color"
+                      value={stage.color}
+                      aria-label={`Cor da etapa ${stage.title}`}
+                      onChange={(event) => {
+                        const stagesDraft = [...newPipeline.stages];
+                        stagesDraft[index] = { ...stage, color: event.target.value };
+                        setNewPipeline({ ...newPipeline, stages: stagesDraft });
+                      }}
+                    />
+                    <input
+                      className="input"
+                      value={stage.title}
+                      onChange={(event) => {
+                        const stagesDraft = [...newPipeline.stages];
+                        stagesDraft[index] = { ...stage, title: event.target.value };
+                        setNewPipeline({ ...newPipeline, stages: stagesDraft });
+                      }}
+                    />
+                    <div className="stage-editor-actions">
+                      <button
+                        type="button"
+                        className="btn mini secondary"
+                        disabled={index === 0}
+                        onClick={() => {
+                          const stagesDraft = [...newPipeline.stages];
+                          [stagesDraft[index - 1], stagesDraft[index]] = [stagesDraft[index], stagesDraft[index - 1]];
+                          setNewPipeline({ ...newPipeline, stages: stagesDraft });
+                        }}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="btn mini secondary"
+                        disabled={index === newPipeline.stages.length - 1}
+                        onClick={() => {
+                          const stagesDraft = [...newPipeline.stages];
+                          [stagesDraft[index + 1], stagesDraft[index]] = [stagesDraft[index], stagesDraft[index + 1]];
+                          setNewPipeline({ ...newPipeline, stages: stagesDraft });
+                        }}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="btn mini danger"
+                        disabled={newPipeline.stages.length <= 1}
+                        onClick={() => setNewPipeline({
+                          ...newPipeline,
+                          stages: newPipeline.stages.filter((_, stageIndex) => stageIndex !== index),
+                        })}
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="stage-preview-line" aria-label="Prévia das etapas">
+                {cleanStageDrafts(newPipeline.stages).map((stage, index) => (
+                  <span key={`${stage.title}-preview-${index}`} style={{ "--stage-color": stage.color } as React.CSSProperties}>
+                    {stage.title}
+                  </span>
+                ))}
+              </div>
             </div>
             <div className="actions" style={{ marginTop: 16 }}>
               <button className="btn" type="submit" disabled={saving}>{saving ? "Criando..." : "Criar pipeline"}</button>
