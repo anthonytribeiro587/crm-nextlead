@@ -1,28 +1,23 @@
-# NextLead CRM
+# NextLead CRM — Inbox tempo quase real + mídias
 
-CRM com landing page, WhatsApp Inbox, funil comercial, propostas, follow-ups, histórico e ordens de serviço.
+Pacote incremental focado no Inbox:
 
-## Deploy
+- Atualização automática das conversas sem precisar F5.
+- Botão `+` do campo de mensagem agora abre anexos/mídia.
+- Envio de imagem, vídeo, áudio e arquivos via Evolution API.
+- Gravação de áudio pelo navegador e envio para o cliente.
+- Botão `+` da lista de conversas continua criando contato rápido.
+- Ajuste de altura do Inbox no desktop para o botão Enviar ficar visível.
 
-1. Suba os arquivos para o GitHub.
-2. No Vercel, mantenha as variáveis de ambiente do Supabase e Evolution API.
-3. Rode o deploy normalmente.
+## Arquivos alterados
 
-## Banco de dados
+- `components/InboxClient.tsx`
+- `app/inbox/page.tsx`
+- `app/api/inbox/route.ts`
+- `app/api/whatsapp/send-media/route.ts`
+- `lib/whatsapp.ts`
+- `app/globals.css`
 
-Para ativar o novo módulo de Ordens de Serviço, rode uma vez no SQL Editor do Supabase:
+## Observações
 
-```sql
--- copiar e executar o conteúdo de scripts/migration-v3-service-orders.sql
-```
-
-Sem essa migration, o CRM continua funcionando, mas a tela `/ordens` mostra um aviso pedindo a criação da tabela.
-
-## Rotas principais
-
-- `/` — Dashboard comercial e operacional
-- `/inbox` — Atendimento WhatsApp
-- `/funil` — Pipeline comercial
-- `/crm` — Ficha do contato, histórico e origem
-- `/ordens` — Ordens de serviço
-- `/configuracoes` — Setup e diagnóstico
+O envio de mídia usa a Evolution API. A visualização de mídias recebidas depende do webhook da Evolution entregar URL/base64 no payload. Se a Evolution não enviar a mídia no webhook, o CRM ainda mostra o marcador `[áudio]`, `[imagem]`, `[vídeo]` etc.

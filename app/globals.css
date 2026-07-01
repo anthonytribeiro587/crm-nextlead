@@ -5638,3 +5638,150 @@ button:disabled {
   .modal-head { display: grid; }
   .dashboard-lower-clean { margin-bottom: 96px; }
 }
+
+/* NextLead CRM — inbox realtime/media UX fix */
+.inbox-topbar {
+  margin-bottom: 14px !important;
+}
+.inbox-topbar h1 {
+  font-size: clamp(2.15rem, 3vw, 3.6rem) !important;
+}
+.inbox-topbar .description {
+  font-size: .92rem !important;
+}
+.inbox-pro {
+  height: min(720px, calc(100dvh - 242px)) !important;
+  min-height: 520px !important;
+  max-height: none !important;
+}
+.whatsapp-composer {
+  position: relative !important;
+  flex-wrap: nowrap !important;
+}
+.composer-attachment-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+.attachment-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 60;
+  width: 220px;
+  padding: 8px;
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, .98), rgba(3, 7, 18, .98));
+  box-shadow: 0 24px 56px rgba(0,0,0,.42);
+}
+.attachment-menu button {
+  min-height: 38px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 12px;
+  background: rgba(255,255,255,.045);
+  color: var(--text);
+  font-weight: 900;
+  text-align: left;
+  padding: 0 11px;
+  cursor: pointer;
+}
+.attachment-menu button:hover,
+.attachment-menu button.recording {
+  border-color: rgba(42, 213, 255, .34);
+  background: rgba(8, 145, 178, .16);
+}
+.attachment-menu button.recording {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, .42);
+  background: rgba(127, 29, 29, .28);
+}
+.sr-only-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.whatsapp-composer .composer-input {
+  min-height: 44px !important;
+  height: 44px;
+  max-height: 96px !important;
+}
+.send-round {
+  min-width: 92px;
+}
+.messages-pro .message.whatsapp-bubble span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.message-media-image {
+  object-fit: contain !important;
+  background: rgba(2, 6, 23, .62) !important;
+}
+.message-audio {
+  display: block;
+  min-width: 240px;
+}
+
+@media (max-width: 1180px) {
+  .inbox-pro {
+    height: min(720px, calc(100dvh - 230px)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .inbox-topbar {
+    margin-bottom: 12px !important;
+  }
+  .inbox-pro,
+  .inbox-pro:not(.inspector-open) {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  .messages-pro {
+    min-height: 52vh !important;
+    padding-bottom: 112px !important;
+  }
+  .whatsapp-composer {
+    position: sticky !important;
+    bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-end !important;
+    gap: 8px !important;
+    padding: 9px !important;
+    margin: 0 6px 8px !important;
+  }
+  .composer-plus {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+  }
+  .whatsapp-composer .composer-input {
+    min-height: 40px !important;
+    height: 40px;
+    padding: 10px 12px !important;
+    font-size: .92rem !important;
+  }
+  .send-round {
+    min-width: 74px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 12px !important;
+  }
+  .attachment-menu {
+    bottom: calc(100% + 8px);
+    width: min(230px, calc(100vw - 28px));
+  }
+}

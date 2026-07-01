@@ -121,6 +121,97 @@ export async function sendWhatsAppText(input: SendWhatsAppTextInput) {
   throw new Error("Nenhum provedor WhatsApp configurado. Configure Evolution API ou Meta Cloud API.");
 }
 
+
+export interface SendWhatsAppMediaInput {
+  to: string;
+  media: string;
+  mimetype: string;
+  fileName?: string;
+  caption?: string;
+  mediaType?: "image" | "video" | "audio" | "document";
+}
+
+function inferMediaType(mimetype: string, mediaType?: SendWhatsAppMediaInput["mediaType"]) {
+  if (mediaType) return mediaType;
+  const mime = String(mimetype || "").toLowerCase();
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "document";
+}
+
+function stripDataUrl(value: string) {
+  return String(value || "").includes(",") ? String(value).split(",").pop() || "" : String(value || "");
+}
+
+async function sendEvolutionMedia(input: SendWhatsAppMediaInput) {
+  const { apiUrl, apiKey, instance } = getEvolutionConfig();
+  const media = stripDataUrl(input.media);
+  const mediatype = inferMediaType(input.mimetype, input.mediaType);
+  const caption = input.caption || "";
+  const fileName = input.fileName || `arquivo-${Date.now()}`;
+
+  async function parseResponse(response: Response) {
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = payload?.response?.message || payload?.message || payload?.error || "Erro ao enviar mídia pela Evolution API.";
+      throw new Error(Array.isArray(detail) ? detail.join(" | ") : detail);
+    }
+    return payload;
+  }
+
+  if (mediatype === "audio") {
+    try {
+      const response = await fetch(`${apiUrl}/message/sendWhatsAppAudio/${instance}`, {
+        method: "POST",
+        headers: {
+          apikey: apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          number: input.to,
+          audio: media,
+          options: { delay: 900, presence: "recording" },
+        }),
+      });
+      const payload = await parseResponse(response);
+      return { provider: "evolution" as const, payload, providerMessageId: extractProviderMessageId(payload) };
+    } catch {
+      // Algumas instalações aceitam áudio apenas pelo endpoint genérico de mídia.
+    }
+  }
+
+  const response = await fetch(`${apiUrl}/message/sendMedia/${instance}`, {
+    method: "POST",
+    headers: {
+      apikey: apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      number: input.to,
+      mediatype,
+      mimetype: input.mimetype,
+      caption,
+      media,
+      fileName,
+      options: {
+        delay: 900,
+        presence: mediatype === "audio" ? "recording" : "composing",
+      },
+    }),
+  });
+
+  const payload = await parseResponse(response);
+  return { provider: "evolution" as const, payload, providerMessageId: extractProviderMessageId(payload) };
+}
+
+export async function sendWhatsAppMedia(input: SendWhatsAppMediaInput) {
+  const provider = getWhatsAppProvider();
+  if (provider === "evolution") return sendEvolutionMedia(input);
+  if (provider === "meta") throw new Error("Envio de mídia pela Meta Cloud API ainda não foi configurado neste CRM.");
+  throw new Error("Nenhum provedor WhatsApp configurado. Configure Evolution API para envio real de mídia.");
+}
+
 export async function getEvolutionConnectionState() {
   const { apiUrl, apiKey, instance } = getEvolutionConfig();
 

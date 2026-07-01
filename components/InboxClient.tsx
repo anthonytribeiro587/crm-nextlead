@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Activity, Contact, Deal, LeadTemperature, Message, ServiceOrder, ServiceOrderStatus, Stage } from "@/lib/types";
 import { money, shortDate } from "@/lib/format";
@@ -195,6 +195,10 @@ export function InboxClient({
   const [showQuickContact, setShowQuickContact] = useState(false);
   const [creatingQuickContact, setCreatingQuickContact] = useState(false);
   const [quickContact, setQuickContact] = useState({ name: "", phone: "", company: "", message: "" });
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [sendingMedia, setSendingMedia] = useState(false);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [showOrderDraft, setShowOrderDraft] = useState(false);
   const [orderDraft, setOrderDraft] = useState({
     title: "",
@@ -213,6 +217,10 @@ export function InboxClient({
   const [proposalPayment, setProposalPayment] = useState("50% para iniciar e 50% na entrega");
   const [lastGeneratedProposal, setLastGeneratedProposal] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioStreamRef = useRef<MediaStream | null>(null);
   const router = useRouter();
 
   const selected = contacts.find((contact) => contact.id === selectedId) || contacts[0];
@@ -317,6 +325,34 @@ export function InboxClient({
     return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 12);
   }, [contactActivities, selectedDeal, selectedServiceOrders, selectedStage?.title, threadMessages]);
 
+  async function refreshInboxData() {
+    try {
+      const response = await fetch("/api/inbox", { cache: "no-store" });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.contacts) return;
+
+      const nextContacts = result.contacts as Contact[];
+      const nextMessages = result.messages as Message[];
+      const nextDeals = result.deals as Deal[];
+      const nextActivities = result.activities as Activity[];
+      const nextServiceOrders = result.serviceOrders as ServiceOrder[];
+
+      setContacts(nextContacts);
+      setDeals(nextDeals);
+      setActivities(nextActivities);
+      setServiceOrders(nextServiceOrders);
+      setMessages((current) => {
+        const serverIds = new Set(nextMessages.map((message) => message.id));
+        const optimistic = current.filter((message) => String(message.id).startsWith("local-") && !serverIds.has(message.id));
+        return [...nextMessages, ...optimistic].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      });
+      setSelectedId((current) => (nextContacts.some((contact) => contact.id === current) ? current : nextContacts[0]?.id));
+      setLastSyncAt(new Date().toISOString());
+    } catch {
+      // Polling é complementar; se falhar, mantém a tela atual.
+    }
+  }
+
   useEffect(() => {
     setContacts(initialContacts);
     setMessages(initialMessages);
@@ -362,20 +398,25 @@ export function InboxClient({
 
   useEffect(() => {
     function refreshOnReturn() {
-      router.refresh();
+      refreshInboxData();
     }
 
     function refreshOnVisible() {
-      if (document.visibilityState === "visible") router.refresh();
+      if (document.visibilityState === "visible") refreshInboxData();
     }
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") refreshInboxData();
+    }, 4500);
 
     window.addEventListener("focus", refreshOnReturn);
     document.addEventListener("visibilitychange", refreshOnVisible);
     return () => {
+      window.clearInterval(interval);
       window.removeEventListener("focus", refreshOnReturn);
       document.removeEventListener("visibilitychange", refreshOnVisible);
     };
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -902,6 +943,134 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
     }
   }
 
+  function fileToDataUrl(file: Blob) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Não foi possível ler o arquivo."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function inferMediaTypeFromMime(mimeType: string): "image" | "video" | "audio" | "document" {
+    const mime = mimeType.toLowerCase();
+    if (mime.startsWith("image/")) return "image";
+    if (mime.startsWith("video/")) return "video";
+    if (mime.startsWith("audio/")) return "audio";
+    return "document";
+  }
+
+  async function sendMediaBlob(blob: Blob, fileName: string, caption = "") {
+    if (!selected || sendingMedia) return;
+
+    const maxSize = 8 * 1024 * 1024;
+    if (blob.size > maxSize) {
+      setActionMessage("Arquivo muito grande para este envio inicial. Use até 8 MB por enquanto.");
+      return;
+    }
+
+    const mimeType = blob.type || "application/octet-stream";
+    const mediaType = inferMediaTypeFromMime(mimeType);
+    const mediaUrl = await fileToDataUrl(blob);
+    const label = caption.trim() || (mediaType === "image" ? `[imagem] ${fileName}` : mediaType === "video" ? `[vídeo] ${fileName}` : mediaType === "audio" ? `[áudio] ${fileName}` : `[arquivo] ${fileName}`);
+
+    const optimistic: Message = {
+      id: `local-media-${Date.now()}`,
+      contactId: selected.id,
+      direction: "outbound",
+      body: label,
+      status: "queued",
+      type: mediaType,
+      mediaUrl,
+      fileName,
+      createdAt: new Date().toISOString(),
+    };
+
+    setSendingMedia(true);
+    setMessages((current) => [...current, optimistic]);
+    setShowAttachmentMenu(false);
+
+    try {
+      const response = await fetch("/api/whatsapp/send-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: selected.phone,
+          contactId: selected.id,
+          media: mediaUrl,
+          mimeType,
+          fileName,
+          caption,
+          mediaType,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === optimistic.id
+            ? { ...message, status: response.ok ? "sent" : "failed", providerMessageId: result.providerMessageId }
+            : message,
+        ),
+      );
+      if (!response.ok) setActionMessage(result.error || "Erro ao enviar mídia.");
+      else setActionMessage(mediaType === "audio" ? "Áudio enviado." : "Mídia enviada.");
+      refreshInboxData();
+    } catch (error) {
+      setMessages((current) => current.map((message) => (message.id === optimistic.id ? { ...message, status: "failed" } : message)));
+      setActionMessage(error instanceof Error ? error.message : "Erro ao enviar mídia.");
+    } finally {
+      setSendingMedia(false);
+    }
+  }
+
+  async function handleMediaFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    await sendMediaBlob(file, file.name);
+  }
+
+  async function toggleAudioRecording() {
+    if (isRecordingAudio) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setActionMessage("Este navegador não permite gravar áudio direto pelo CRM.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        setIsRecordingAudio(false);
+        audioStreamRef.current?.getTracks().forEach((track) => track.stop());
+        audioStreamRef.current = null;
+        const mimeType = recorder.mimeType || "audio/webm";
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        audioChunksRef.current = [];
+        if (blob.size > 0) await sendMediaBlob(blob, `audio-${Date.now()}.webm`);
+      };
+
+      recorder.start();
+      setIsRecordingAudio(true);
+      setActionMessage("Gravando áudio. Clique em parar para enviar.");
+    } catch {
+      setIsRecordingAudio(false);
+      setActionMessage("Não consegui acessar o microfone. Verifique a permissão do navegador.");
+    }
+  }
+
   if (contacts.length === 0) {
     return (
       <section className="card inbox empty-inbox">
@@ -1016,7 +1185,26 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
         </div>
 
         <footer className="composer composer-pro whatsapp-composer">
-          <button className="composer-plus" type="button" onClick={() => setShowQuickContact(true)} aria-label="Novo contato">+</button>
+          <div className="composer-attachment-wrap">
+            <button className="composer-plus" type="button" onClick={() => setShowAttachmentMenu((current) => !current)} aria-label="Anexar mídia">+</button>
+            {showAttachmentMenu && (
+              <div className="attachment-menu">
+                <button type="button" onClick={() => mediaFileInputRef.current?.click()} disabled={sendingMedia}>
+                  Imagem, vídeo ou arquivo
+                </button>
+                <button type="button" onClick={toggleAudioRecording} disabled={sendingMedia} className={isRecordingAudio ? "recording" : ""}>
+                  {isRecordingAudio ? "Parar e enviar áudio" : "Gravar áudio"}
+                </button>
+              </div>
+            )}
+            <input
+              ref={mediaFileInputRef}
+              className="sr-only-file"
+              type="file"
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+              onChange={handleMediaFileChange}
+            />
+          </div>
           <textarea
             className="input composer-input"
             placeholder="Mensagem"
@@ -1029,7 +1217,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
               }
             }}
           />
-          <button className="btn send-round" onClick={sendMessage}>Enviar</button>
+          <button className="btn send-round" onClick={sendMessage} disabled={sendingMedia}>{sendingMedia ? "Enviando..." : "Enviar"}</button>
         </footer>
       </div>
 

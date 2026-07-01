@@ -9,7 +9,7 @@ export default async function InboxPage({ searchParams }: { searchParams?: { con
 
   return (
     <>
-      <div className="topbar">
+      <div className="topbar inbox-topbar">
         <div>
           <p className="eyebrow">WhatsApp Inbox</p>
           <h1>Atendimento centralizado.</h1>

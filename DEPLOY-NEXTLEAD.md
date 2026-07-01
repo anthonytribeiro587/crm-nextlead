@@ -1,30 +1,19 @@
-# Deploy NextLead CRM
+# Deploy NextLead
 
-## Antes do deploy
-
-Não altere as variáveis que já estão funcionando:
-
-- Supabase URL
-- Supabase Service Role Key
-- Evolution API URL
-- Evolution API Key
-- Evolution Instance
-- Webhook Secret
-
-## Novo módulo: Ordens de Serviço
-
-Depois de subir este pacote, rode no Supabase SQL Editor o arquivo:
+Commit sugerido:
 
 ```txt
-scripts/migration-v3-service-orders.sql
+inbox realtime midia audio fix
 ```
 
-Isso cria a tabela `service_orders` usada pela tela `/ordens`, pela ficha do contato no `/crm` e pelo botão “Criar OS” no Inbox.
+## Testes sugeridos
 
-## Testes rápidos
-
-1. Abrir `/crm` e selecionar um contato.
-2. Clicar em “Criar OS”.
-3. Abrir `/ordens` e alterar o status da OS.
-4. Voltar ao `/crm` e conferir se o histórico registrou o evento.
-5. Abrir no mobile e conferir a navbar inferior.
+1. Abrir `/inbox` no desktop.
+2. Ver se o botão Enviar aparece sem precisar rolar a página.
+3. Enviar mensagem de texto.
+4. Responder pelo WhatsApp e aguardar alguns segundos sem apertar F5.
+5. Clicar no `+` do campo de mensagem e enviar imagem/vídeo/arquivo.
+6. Clicar no `+` do campo de mensagem e testar gravação de áudio.
+7. Clicar no `+` da lista de conversas e criar contato rápido.
+8. Testar no mobile se o campo de mensagem continua acima da navbar.
+```
