@@ -189,6 +189,52 @@ function messageNeedsMediaResolve(message: Message) {
   );
 }
 
+
+function messageSortTime(message: Message) {
+  const time = new Date(message.createdAt || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function messageDedupeKey(message: Message) {
+  const providerId = String(message.providerMessageId || "").trim();
+  if (providerId) return `provider:${providerId}`;
+
+  const createdBucket = Math.floor(messageSortTime(message) / 30000);
+  const body = String(message.body || "").replace(/\s+/g, " " ).trim().toLowerCase();
+  const type = String(message.type || "text").toLowerCase();
+  const fileName = String(message.fileName || "").toLowerCase();
+  return `fallback:${message.contactId}:${message.direction}:${type}:${body}:${fileName}:${createdBucket}`;
+}
+
+function messagePriority(message: Message) {
+  let score = 0;
+  if (!String(message.id).startsWith("local-")) score += 10;
+  if (message.status === "sent" || message.status === "delivered" || message.status === "read" || message.status === "received") score += 4;
+  if (message.providerMessageId) score += 2;
+  if (message.mediaUrl) score += 1;
+  return score;
+}
+
+function mergeMessagesForInbox(input: Message[]) {
+  const byKey = new Map<string, Message>();
+
+  for (const message of input) {
+    const key = messageDedupeKey(message);
+    const existing = byKey.get(key);
+    if (!existing || messagePriority(message) >= messagePriority(existing)) {
+      byKey.set(key, {
+        ...existing,
+        ...message,
+        mediaUrl: message.mediaUrl || existing?.mediaUrl,
+        fileName: message.fileName || existing?.fileName,
+        providerMessageId: message.providerMessageId || existing?.providerMessageId,
+      });
+    }
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => messageSortTime(a) - messageSortTime(b));
+}
+
 function mediaButtonLabel(message: Message) {
   const type = String(message.type || "").toLowerCase();
   const body = String(message.body || "").toLowerCase();
@@ -217,7 +263,7 @@ export function InboxClient({
 }) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
   const [selectedId, setSelectedId] = useState(initialContacts.find((contact) => contact.id === initialSelectedId)?.id || initialContacts[0]?.id);
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>(() => mergeMessagesForInbox(initialMessages));
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
   const [activities, setActivities] = useState<Activity[]>(initialActivities);
   const [draft, setDraft] = useState("");
@@ -279,16 +325,14 @@ export function InboxClient({
   }, [stages]);
   const proposalStage = useMemo(() => stages.find((stage) => stage.title.toLowerCase().includes("proposta")), [stages]);
   const threadMessages = useMemo(() => {
-    return messages
-      .filter((message) => message.contactId === selected?.id)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return mergeMessagesForInbox(messages.filter((message) => message.contactId === selected?.id));
   }, [messages, selected?.id]);
   const contactActivities = useMemo(() => activities.filter((activity) => activity.contactId === selected?.id), [activities, selected?.id]);
   const selectedServiceOrders = useMemo(() => serviceOrders.filter((order) => order.contactId === selected?.id), [serviceOrders, selected?.id]);
   const activeServiceOrders = useMemo(() => selectedServiceOrders.filter((order) => !["concluida", "entregue", "cancelada"].includes(order.status)), [selectedServiceOrders]);
   const latestMessageByContact = useMemo(() => {
     const map = new Map<string, Message>();
-    for (const message of messages) {
+    for (const message of mergeMessagesForInbox(messages)) {
       const previous = map.get(message.contactId);
       if (!previous || new Date(message.createdAt).getTime() > new Date(previous.createdAt).getTime()) map.set(message.contactId, message);
     }
@@ -381,7 +425,7 @@ export function InboxClient({
       if (!response.ok || !result?.contacts) return;
 
       const nextContacts = result.contacts as Contact[];
-      const nextMessages = result.messages as Message[];
+      const nextMessages = mergeMessagesForInbox(result.messages as Message[]);
       const nextDeals = result.deals as Deal[];
       const nextActivities = result.activities as Activity[];
       const nextServiceOrders = result.serviceOrders as ServiceOrder[];
@@ -391,9 +435,9 @@ export function InboxClient({
       setActivities(nextActivities);
       setServiceOrders(nextServiceOrders);
       setMessages((current) => {
-        const serverIds = new Set(nextMessages.map((message) => message.id));
-        const optimistic = current.filter((message) => String(message.id).startsWith("local-") && !serverIds.has(message.id));
-        return [...nextMessages, ...optimistic].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        const serverKeys = new Set(nextMessages.map(messageDedupeKey));
+        const optimistic = current.filter((message) => String(message.id).startsWith("local-") && !serverKeys.has(messageDedupeKey(message)));
+        return mergeMessagesForInbox([...nextMessages, ...optimistic]);
       });
       setSelectedId((current) => (nextContacts.some((contact) => contact.id === current) ? current : nextContacts[0]?.id));
       setLastSyncAt(new Date().toISOString());
@@ -404,7 +448,7 @@ export function InboxClient({
 
   useEffect(() => {
     setContacts(initialContacts);
-    setMessages(initialMessages);
+    setMessages(mergeMessagesForInbox(initialMessages));
     setDeals(initialDeals);
     setActivities(initialActivities);
     setServiceOrders(initialServiceOrders);
