@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Activity, Contact, Deal, LeadTemperature, Message, Stage } from "@/lib/types";
+import type { Activity, Contact, Deal, LeadTemperature, Message, ServiceOrder, ServiceOrderStatus, Stage } from "@/lib/types";
 import { money, shortDate } from "@/lib/format";
 
 function formatDateTimeLocal(date: Date) {
@@ -88,12 +88,57 @@ const proposalModels: Record<ProposalModel, { label: string; headline: string; s
   },
 };
 
+
+
+const serviceOrderStatusLabels: Record<ServiceOrderStatus, string> = {
+  aberta: "Aberta",
+  diagnostico: "Diagnóstico",
+  aguardando_aprovacao: "Aguardando aprovação",
+  aprovada: "Aprovada",
+  execucao: "Em execução",
+  aguardando_material: "Aguardando material",
+  concluida: "Concluída",
+  entregue: "Entregue",
+  cancelada: "Cancelada",
+};
+
+const closedServiceOrderStatuses: ServiceOrderStatus[] = ["concluida", "entregue", "cancelada"];
+
+function mapApiServiceOrder(serviceOrder: any): ServiceOrder {
+  return {
+    id: serviceOrder.id,
+    contactId: serviceOrder.contact_id,
+    dealId: serviceOrder.deal_id || undefined,
+    code: serviceOrder.code,
+    title: serviceOrder.title,
+    description: serviceOrder.description || undefined,
+    status: serviceOrder.status,
+    priority: serviceOrder.priority,
+    owner: serviceOrder.owner,
+    estimatedValue: Number(serviceOrder.estimated_value || 0),
+    finalValue: Number(serviceOrder.final_value || 0),
+    dueAt: serviceOrder.due_at || undefined,
+    startedAt: serviceOrder.started_at || undefined,
+    completedAt: serviceOrder.completed_at || undefined,
+    internalNotes: serviceOrder.internal_notes || undefined,
+    createdAt: serviceOrder.created_at,
+    updatedAt: serviceOrder.updated_at,
+  };
+}
+
+function contactInitials(name?: string) {
+  const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return (parts[0]?.slice(0, 1) || "?").toUpperCase();
+}
+
 export function InboxClient({
   contacts: initialContacts,
   messages: initialMessages,
   deals: initialDeals,
   stages,
   activities: initialActivities,
+  serviceOrders: initialServiceOrders,
   initialSelectedId,
 }: {
   contacts: Contact[];
@@ -101,6 +146,7 @@ export function InboxClient({
   deals: Deal[];
   stages: Stage[];
   activities: Activity[];
+  serviceOrders: ServiceOrder[];
   initialSelectedId?: string;
 }) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
@@ -111,7 +157,7 @@ export function InboxClient({
   const [draft, setDraft] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [assistantNote, setAssistantNote] = useState<string | null>(null);
-  const [activePanel, setActivePanel] = useState<"acoes" | "proposta" | "assistente" | "historico">("acoes");
+  const [activePanel, setActivePanel] = useState<"acoes" | "ordens" | "proposta" | "assistente" | "historico">("acoes");
   const [showInspector, setShowInspector] = useState(false);
   const [moving, setMoving] = useState<string | null>(null);
   const [updatingLead, setUpdatingLead] = useState(false);
@@ -120,6 +166,18 @@ export function InboxClient({
   const [editingDeal, setEditingDeal] = useState(false);
   const [savingDeal, setSavingDeal] = useState(false);
   const [creatingOrder, setCreatingOrder] = useState(false);
+  const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>(initialServiceOrders);
+  const [showOrderDraft, setShowOrderDraft] = useState(false);
+  const [orderDraft, setOrderDraft] = useState({
+    title: "",
+    description: "",
+    status: "aberta" as ServiceOrderStatus,
+    priority: "morno" as LeadTemperature,
+    owner: "NextLead",
+    estimatedValue: "0",
+    dueAt: "",
+    internalNotes: "",
+  });
   const [followUpAt, setFollowUpAt] = useState(tomorrowBusinessTime);
   const [dealForm, setDealForm] = useState({ title: "", value: "", expectedClose: "" });
   const [proposalModel, setProposalModel] = useState<ProposalModel>("landing-pro");
@@ -146,6 +204,16 @@ export function InboxClient({
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [messages, selected?.id]);
   const contactActivities = useMemo(() => activities.filter((activity) => activity.contactId === selected?.id), [activities, selected?.id]);
+  const selectedServiceOrders = useMemo(() => serviceOrders.filter((order) => order.contactId === selected?.id), [serviceOrders, selected?.id]);
+  const activeServiceOrders = useMemo(() => selectedServiceOrders.filter((order) => !["concluida", "entregue", "cancelada"].includes(order.status)), [selectedServiceOrders]);
+  const latestMessageByContact = useMemo(() => {
+    const map = new Map<string, Message>();
+    for (const message of messages) {
+      const previous = map.get(message.contactId);
+      if (!previous || new Date(message.createdAt).getTime() > new Date(previous.createdAt).getTime()) map.set(message.contactId, message);
+    }
+    return map;
+  }, [messages]);
 
   const quickReplies = useMemo(() => {
     const name = firstName(selected?.name);
@@ -198,20 +266,31 @@ export function InboxClient({
       });
     });
 
-    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10);
-  }, [contactActivities, selectedDeal, selectedStage?.title, threadMessages]);
+    selectedServiceOrders.slice(0, 6).forEach((order) => {
+      items.push({
+        id: `service-order-${order.id}`,
+        date: order.updatedAt || order.createdAt,
+        title: `OS ${serviceOrderStatusLabels[order.status]}`,
+        detail: `${order.code} · ${order.title}`,
+        tone: closedServiceOrderStatuses.includes(order.status) ? "success" : "info",
+      });
+    });
+
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 12);
+  }, [contactActivities, selectedDeal, selectedServiceOrders, selectedStage?.title, threadMessages]);
 
   useEffect(() => {
     setContacts(initialContacts);
     setMessages(initialMessages);
     setDeals(initialDeals);
     setActivities(initialActivities);
+    setServiceOrders(initialServiceOrders);
     setSelectedId((current) => {
       const urlSelected = initialContacts.find((contact) => contact.id === initialSelectedId)?.id;
       if (urlSelected) return urlSelected;
       return initialContacts.some((contact) => contact.id === current) ? current : initialContacts[0]?.id;
     });
-  }, [initialActivities, initialContacts, initialDeals, initialMessages, initialSelectedId]);
+  }, [initialActivities, initialContacts, initialDeals, initialMessages, initialSelectedId, initialServiceOrders]);
 
   useEffect(() => {
     function refreshOnReturn() {
@@ -245,9 +324,10 @@ export function InboxClient({
     setLastGeneratedProposal(null);
     setActivePanel("acoes");
     setShowInspector(false);
+    setShowOrderDraft(false);
   }, [selected?.id]);
 
-  function openInspector(panel: "acoes" | "proposta" | "assistente" | "historico") {
+  function openInspector(panel: "acoes" | "ordens" | "proposta" | "assistente" | "historico") {
     setActivePanel(panel);
     setShowInspector(true);
   }
@@ -388,8 +468,40 @@ export function InboxClient({
     }
   }
 
+  function openServiceOrderDraft(forceNew = false) {
+    if (!selected) return;
+
+    if (!forceNew && activeServiceOrders.length > 0) {
+      setActivePanel("ordens");
+      setShowInspector(true);
+      setShowOrderDraft(false);
+      setActionMessage("Este lead já tem OS aberta. Revise a OS existente antes de criar outra.");
+      return;
+    }
+
+    setOrderDraft({
+      title: selectedDeal?.title || `Atendimento operacional - ${selected.name}`,
+      description: `Demanda criada a partir do atendimento com ${selected.name}.`,
+      status: "aberta",
+      priority: selected.temperature,
+      owner: selected.owner || "NextLead",
+      estimatedValue: String(selectedDeal?.value || 0),
+      dueAt: "",
+      internalNotes: "",
+    });
+    setActivePanel("ordens");
+    setShowInspector(true);
+    setShowOrderDraft(true);
+    setActionMessage(null);
+  }
+
   async function createServiceOrderFromInbox() {
     if (!selected) return;
+
+    if (!orderDraft.title.trim()) {
+      setActionMessage("Informe o serviço/demanda antes de criar a OS.");
+      return;
+    }
 
     setCreatingOrder(true);
     setActionMessage(null);
@@ -401,18 +513,29 @@ export function InboxClient({
         body: JSON.stringify({
           contactId: selected.id,
           dealId: selectedDeal?.id || null,
-          title: selectedDeal?.title || `Atendimento operacional - ${selected.name}`,
-          description: "Demanda criada a partir do atendimento no Inbox.",
-          status: "aberta",
-          priority: selected.temperature,
-          owner: selected.owner,
-          estimatedValue: selectedDeal?.value || 0,
+          ...orderDraft,
+          dueAt: orderDraft.dueAt || null,
+          preventDuplicate: true,
         }),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.detail || result.error || "Erro ao criar ordem de serviço.");
+      if (!response.ok) {
+        if (response.status === 409 && result.existingOrder) {
+          const existing = mapApiServiceOrder(result.existingOrder);
+          setServiceOrders((current) => (current.some((order) => order.id === existing.id) ? current : [existing, ...current]));
+          setShowOrderDraft(false);
+          setActivePanel("ordens");
+          throw new Error(`Já existe uma OS aberta para este lead: ${existing.code}.`);
+        }
+        throw new Error(result.detail || result.error || "Erro ao criar ordem de serviço.");
+      }
+      if (result.serviceOrder) {
+        const saved = mapApiServiceOrder(result.serviceOrder);
+        setServiceOrders((current) => [saved, ...current.filter((order) => order.id !== saved.id)]);
+      }
       setActionMessage(`OS criada${result.serviceOrder?.code ? `: ${result.serviceOrder.code}` : ""}.`);
       await logCommercialHistory(`OS criada${result.serviceOrder?.code ? `: ${result.serviceOrder.code}` : ""}`);
+      setShowOrderDraft(false);
       router.refresh();
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Erro ao criar ordem de serviço.");
@@ -685,12 +808,15 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
                 setActionMessage(null);
               }}
             >
-              <span className="avatar">{contact.name.slice(0, 1)}</span>
+              <span className="avatar contact-photo-fallback">{contactInitials(contact.name)}</span>
               <span className="thread-copy">
                 <strong>{contact.name}</strong>
-                <span className="muted">{contact.company || contact.source}</span>
+                <span className="muted">{latestMessageByContact.get(contact.id)?.body?.slice(0, 44) || contact.company || contact.source}</span>
               </span>
-              <span className={`thread-temp ${contact.temperature}`}>{contact.temperature}</span>
+              <span className="thread-meta-side">
+                <span className={`thread-temp ${contact.temperature}`}>{contact.temperature}</span>
+                {latestMessageByContact.get(contact.id) && <small>{shortDate(latestMessageByContact.get(contact.id)!.createdAt)}</small>}
+              </span>
             </button>
           ))}
         </div>
@@ -698,17 +824,16 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
 
       <div className="chat chat-fixed chat-pro">
         <header className="chat-head-pro">
-          <div className="contact-title-block">
-            <span className="eyebrow-small">Contato em atendimento</span>
-            <h2>{selected?.name}</h2>
-            <span className="muted">{selected?.phone} • {selected?.company || "sem empresa"}</span>
-          </div>
-          <div className="chat-head-actions-pro">
-            <div className="chat-context-pill">
-              <span>Oportunidade</span>
-              <strong>{selectedDeal ? money(selectedDeal.value) : "R$ 0,00"}</strong>
+          <div className="contact-title-block whatsapp-contact-title">
+            <span className="avatar contact-photo-large contact-photo-fallback">{contactInitials(selected?.name)}</span>
+            <div>
+              <span className="eyebrow-small">Contato em atendimento</span>
+              <h2>{selected?.name}</h2>
+              <span className="muted">{selected?.phone} • {selected?.company || "sem empresa"}</span>
             </div>
-            <label className="header-stage-field">
+          </div>
+          <div className="chat-head-actions-pro whatsapp-chat-actions">
+            <label className="header-stage-field header-stage-whatsapp">
               <span>Etapa atual</span>
               <select
                 value={selectedDealStatus}
@@ -722,6 +847,9 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
                 <option value="perdido">Perdido</option>
               </select>
             </label>
+            <button className="btn mini secondary os-head-button" onClick={() => openInspector("ordens")}>
+              {activeServiceOrders.length ? `${activeServiceOrders.length} OS aberta${activeServiceOrders.length > 1 ? "s" : ""}` : "OS"}
+            </button>
             <button className="btn mini" onClick={() => openInspector("acoes")}>Ferramentas</button>
           </div>
         </header>
@@ -847,6 +975,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
 
         <div className="inspector-tabs" role="tablist" aria-label="Ferramentas do atendimento">
           <button className={activePanel === "acoes" ? "active" : ""} onClick={() => setActivePanel("acoes")}>Ações</button>
+          <button className={activePanel === "ordens" ? "active" : ""} onClick={() => setActivePanel("ordens")}>OS</button>
           <button className={activePanel === "proposta" ? "active" : ""} onClick={() => setActivePanel("proposta")}>Proposta</button>
           <button className={activePanel === "assistente" ? "active" : ""} onClick={() => setActivePanel("assistente")}>IA</button>
           <button className={activePanel === "historico" ? "active" : ""} onClick={() => setActivePanel("historico")}>Histórico</button>
@@ -874,15 +1003,104 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
                   {schedulingFollowUp ? "Agendando..." : "Agendar follow-up"}
                 </button>
               </div>
+            </div>
+          )}
 
-              <div className="followup-box os-quick-create">
+
+          {activePanel === "ordens" && (
+            <div className="inspector-section order-panel-whatsapp">
+              <div className="inspector-headline">
                 <span className="eyebrow-small">Execução</span>
-                <strong>Criar ordem de serviço</strong>
-                <p className="muted tool-hint">Use quando a conversa virar uma demanda para entregar, instalar, reparar ou executar.</p>
-                <button className="btn mini" onClick={createServiceOrderFromInbox} disabled={!selected || creatingOrder}>
-                  {creatingOrder ? "Criando OS..." : "Criar OS deste lead"}
-                </button>
+                <strong>Ordens deste lead</strong>
               </div>
+              <p className="muted tool-hint">Antes de criar uma nova OS, confira se já existe uma demanda aberta para este atendimento.</p>
+
+              <div className="inbox-orders-list">
+                {selectedServiceOrders.length === 0 ? (
+                  <div className="empty-mini-card">
+                    <strong>Nenhuma OS criada.</strong>
+                    <span>Quando o atendimento virar execução, crie a primeira ordem aqui.</span>
+                  </div>
+                ) : (
+                  selectedServiceOrders.map((order) => (
+                    <div key={order.id} className={`inbox-order-card ${closedServiceOrderStatuses.includes(order.status) ? "closed" : "open"}`}>
+                      <div>
+                        <strong>{order.code}</strong>
+                        <span>{order.title}</span>
+                        <small>{serviceOrderStatusLabels[order.status]} • {money(order.finalValue || order.estimatedValue)}</small>
+                      </div>
+                      <a className="btn mini secondary" href="/ordens">Abrir</a>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {!showOrderDraft && (
+                <div className="os-create-actions">
+                  {activeServiceOrders.length > 0 ? (
+                    <>
+                      <span className="duplicate-os-warning">Este lead já tem {activeServiceOrders.length} OS aberta{activeServiceOrders.length > 1 ? "s" : ""}. Evite criar duplicada.</span>
+                      <button className="btn mini secondary" onClick={() => openServiceOrderDraft(true)} disabled={!selected}>Criar outra mesmo assim</button>
+                    </>
+                  ) : (
+                    <button className="btn mini" onClick={() => openServiceOrderDraft(true)} disabled={!selected}>Criar OS deste lead</button>
+                  )}
+                </div>
+              )}
+
+              {showOrderDraft && (
+                <div className="inbox-os-draft">
+                  <div className="inspector-headline compact-headline">
+                    <span className="eyebrow-small">Conferência</span>
+                    <strong>Revise antes de salvar</strong>
+                  </div>
+                  <label className="form-row">Serviço / demanda
+                    <input className="input input-compact" value={orderDraft.title} onChange={(event) => setOrderDraft((current) => ({ ...current, title: event.target.value }))} />
+                  </label>
+                  <div className="form-grid compact-grid">
+                    <label className="form-row">Status
+                      <select className="input input-compact" value={orderDraft.status} onChange={(event) => setOrderDraft((current) => ({ ...current, status: event.target.value as ServiceOrderStatus }))}>
+                        <option value="aberta">Aberta</option>
+                        <option value="diagnostico">Diagnóstico</option>
+                        <option value="aguardando_aprovacao">Aguardando aprovação</option>
+                        <option value="aprovada">Aprovada</option>
+                        <option value="execucao">Em execução</option>
+                        <option value="aguardando_material">Aguardando material</option>
+                      </select>
+                    </label>
+                    <label className="form-row">Prioridade
+                      <select className="input input-compact" value={orderDraft.priority} onChange={(event) => setOrderDraft((current) => ({ ...current, priority: event.target.value as LeadTemperature }))}>
+                        <option value="frio">Baixa</option>
+                        <option value="morno">Média</option>
+                        <option value="quente">Alta</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="form-grid compact-grid">
+                    <label className="form-row">Responsável
+                      <input className="input input-compact" value={orderDraft.owner} onChange={(event) => setOrderDraft((current) => ({ ...current, owner: event.target.value }))} />
+                    </label>
+                    <label className="form-row">Valor
+                      <input className="input input-compact" value={orderDraft.estimatedValue} onChange={(event) => setOrderDraft((current) => ({ ...current, estimatedValue: event.target.value }))} />
+                    </label>
+                  </div>
+                  <label className="form-row">Previsão
+                    <input className="input input-compact" type="datetime-local" value={orderDraft.dueAt} onChange={(event) => setOrderDraft((current) => ({ ...current, dueAt: event.target.value }))} />
+                  </label>
+                  <label className="form-row">Descrição
+                    <textarea className="input input-compact" value={orderDraft.description} onChange={(event) => setOrderDraft((current) => ({ ...current, description: event.target.value }))} />
+                  </label>
+                  <label className="form-row">Observação interna
+                    <textarea className="input input-compact" value={orderDraft.internalNotes} onChange={(event) => setOrderDraft((current) => ({ ...current, internalNotes: event.target.value }))} placeholder="Materiais, combinados, responsáveis, próximos passos..." />
+                  </label>
+                  <div className="inspector-actions">
+                    <button className="btn mini" onClick={createServiceOrderFromInbox} disabled={!selected || creatingOrder}>
+                      {creatingOrder ? "Criando..." : "Criar OS"}
+                    </button>
+                    <button className="btn mini secondary" onClick={() => setShowOrderDraft(false)} disabled={creatingOrder}>Cancelar</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

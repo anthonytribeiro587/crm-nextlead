@@ -44,6 +44,32 @@ function serviceOrderSelect() {
   return "id,contact_id,deal_id,code,title,description,status,priority,owner,estimated_value,final_value,due_at,started_at,completed_at,internal_notes,created_at,updated_at";
 }
 
+
+async function generateNextServiceOrderCode(supabase: ReturnType<typeof getSupabaseAdmin>) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const start = `${year}-01-01T00:00:00.000Z`;
+  const end = `${year + 1}-01-01T00:00:00.000Z`;
+
+  if (!supabase) return `${year} - 1`;
+
+  const { data, error } = await supabase
+    .from("service_orders")
+    .select("code,created_at")
+    .gte("created_at", start)
+    .lt("created_at", end);
+
+  if (error) return `${year} - ${Date.now().toString().slice(-4)}`;
+
+  let max = 0;
+  for (const row of data || []) {
+    const match = String((row as any).code || "").match(/^(\d{4})\s*-\s*(\d+)$/);
+    if (match && Number(match[1]) === year) max = Math.max(max, Number(match[2]));
+  }
+
+  return `${year} - ${max + 1}`;
+}
+
 function tableMissingResponse(message?: string) {
   return NextResponse.json(
     {
@@ -74,8 +100,30 @@ export async function POST(request: NextRequest) {
   if (!allowedPriorities.has(priority)) return NextResponse.json({ error: "Prioridade inválida." }, { status: 400 });
   if (!allowedStatuses.has(status)) return NextResponse.json({ error: "Status inválido." }, { status: 400 });
 
-  const now = new Date();
-  const code = cleanText(payload.code) || `OS-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}-${String(Date.now()).slice(-5)}`;
+  const shouldPreventDuplicate = Boolean(payload.preventDuplicate);
+  if (shouldPreventDuplicate) {
+    const { data: existingOrder } = await supabase
+      .from("service_orders")
+      .select(serviceOrderSelect())
+      .eq("contact_id", contactId)
+      .not("status", "in", "(concluida,entregue,cancelada)")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingOrder) {
+      return NextResponse.json(
+        {
+          error: "Este lead já possui uma ordem de serviço aberta.",
+          detail: "Abra a OS existente antes de criar uma nova demanda para o mesmo cliente.",
+          existingOrder,
+        },
+        { status: 409 },
+      );
+    }
+  }
+
+  const code = cleanText(payload.code) || await generateNextServiceOrderCode(supabase);
 
   const insert = {
     contact_id: contactId,

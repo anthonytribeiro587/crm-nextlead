@@ -64,6 +64,28 @@ function orderStatusClass(order: ServiceOrder) {
   return "neutral";
 }
 
+function mapApiOrder(serviceOrder: any): ServiceOrder {
+  return {
+    id: serviceOrder.id,
+    contactId: serviceOrder.contact_id,
+    dealId: serviceOrder.deal_id || undefined,
+    code: serviceOrder.code,
+    title: serviceOrder.title,
+    description: serviceOrder.description || undefined,
+    status: serviceOrder.status,
+    priority: serviceOrder.priority,
+    owner: serviceOrder.owner,
+    estimatedValue: Number(serviceOrder.estimated_value || 0),
+    finalValue: Number(serviceOrder.final_value || 0),
+    dueAt: serviceOrder.due_at || undefined,
+    startedAt: serviceOrder.started_at || undefined,
+    completedAt: serviceOrder.completed_at || undefined,
+    internalNotes: serviceOrder.internal_notes || undefined,
+    createdAt: serviceOrder.created_at,
+    updatedAt: serviceOrder.updated_at,
+  };
+}
+
 export function ServiceOrdersClient({
   serviceOrders: initialOrders,
   contacts,
@@ -125,17 +147,20 @@ export function ServiceOrdersClient({
 
   const selectedOrder = selectedOrderId ? orders.find((order) => order.id === selectedOrderId) : null;
   const selectedContact = selectedOrder ? contactById.get(selectedOrder.contactId) : null;
+  const selectedDeal = selectedOrder?.dealId ? dealById.get(selectedOrder.dealId) : null;
+  const formContact = form.contactId ? contactById.get(form.contactId) : undefined;
+  const formDeal = form.dealId ? dealById.get(form.dealId) : undefined;
 
   function startCreate(contactId?: string) {
     const contact = contactId ? contactById.get(contactId) : undefined;
     const deal = contact ? deals.find((item) => item.contactId === contact.id && item.status !== "perdido") : undefined;
     setEditingId(null);
-    setSelectedOrderId(null);
     setForm({
       ...emptyOrderForm(),
       contactId: contact?.id || contacts[0]?.id || "",
       dealId: deal?.id || "",
       title: deal?.title || "Novo atendimento operacional",
+      description: contact ? `Demanda operacional para ${contact.name}.` : "",
       priority: contact?.temperature || "morno",
       owner: contact?.owner || "NextLead",
       estimatedValue: String(deal?.value || 0),
@@ -164,7 +189,7 @@ export function ServiceOrdersClient({
     setFeedback(null);
   }
 
-  function closePanel() {
+  function closeForm() {
     setShowForm(false);
     setEditingId(null);
     setFeedback(null);
@@ -173,6 +198,10 @@ export function ServiceOrdersClient({
   async function saveOrder() {
     if (!form.contactId) {
       setFeedback("Selecione um contato para criar a OS.");
+      return;
+    }
+    if (!form.title.trim()) {
+      setFeedback("Informe o serviço ou demanda da OS.");
       return;
     }
     setSaving(true);
@@ -191,30 +220,12 @@ export function ServiceOrdersClient({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.detail || result.error || "Erro ao salvar ordem de serviço.");
       if (result.serviceOrder) {
-        const saved: ServiceOrder = {
-          id: result.serviceOrder.id,
-          contactId: result.serviceOrder.contact_id,
-          dealId: result.serviceOrder.deal_id || undefined,
-          code: result.serviceOrder.code,
-          title: result.serviceOrder.title,
-          description: result.serviceOrder.description || undefined,
-          status: result.serviceOrder.status,
-          priority: result.serviceOrder.priority,
-          owner: result.serviceOrder.owner,
-          estimatedValue: Number(result.serviceOrder.estimated_value || 0),
-          finalValue: Number(result.serviceOrder.final_value || 0),
-          dueAt: result.serviceOrder.due_at || undefined,
-          startedAt: result.serviceOrder.started_at || undefined,
-          completedAt: result.serviceOrder.completed_at || undefined,
-          internalNotes: result.serviceOrder.internal_notes || undefined,
-          createdAt: result.serviceOrder.created_at,
-          updatedAt: result.serviceOrder.updated_at,
-        };
+        const saved = mapApiOrder(result.serviceOrder);
         setOrders((current) => (editingId ? current.map((order) => (order.id === saved.id ? saved : order)) : [saved, ...current]));
         setSelectedOrderId(saved.id);
-        setEditingId(saved.id);
       }
       setShowForm(false);
+      setEditingId(null);
       setFeedback(editingId ? "Ordem de serviço atualizada." : "Ordem de serviço criada.");
       router.refresh();
     } catch (error) {
@@ -234,8 +245,9 @@ export function ServiceOrdersClient({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.detail || result.error || "Erro ao atualizar status.");
-      setOrders((current) => current.map((item) => (item.id === order.id ? { ...item, status, updatedAt: new Date().toISOString() } : item)));
-      if (editingId === order.id) setForm((current) => ({ ...current, status }));
+      const saved = result.serviceOrder ? mapApiOrder(result.serviceOrder) : { ...order, status, updatedAt: new Date().toISOString() };
+      setOrders((current) => current.map((item) => (item.id === order.id ? saved : item)));
+      setSelectedOrderId(order.id);
       router.refresh();
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Erro ao atualizar status.");
@@ -256,7 +268,7 @@ export function ServiceOrdersClient({
         <div>
           <p className="eyebrow-small">Operação</p>
           <h2>Lista de ordens</h2>
-          <p className="muted">Veja rapidamente cliente, serviço, status, responsável e prazo. Clique em uma OS para editar.</p>
+          <p className="muted">Veja rapidamente cliente, serviço, status, responsável e prazo. Clique em uma OS para abrir o detalhe.</p>
         </div>
         <div className="os-kpi-strip">
           <span><strong>{openOrders.length}</strong> abertas</span>
@@ -280,7 +292,7 @@ export function ServiceOrdersClient({
         <button className="btn" type="button" onClick={() => startCreate()}>Nova OS</button>
       </section>
 
-      <section className="os-list-layout">
+      <section className="os-list-layout os-list-layout-clean">
         <article className="card os-list-card">
           <div className="os-list-title">
             <div>
@@ -307,8 +319,8 @@ export function ServiceOrdersClient({
                     tabIndex={0}
                     className={`os-list-row ${selectedOrderId === order.id ? "active" : ""} ${isLate(order) ? "late" : ""}`}
                     key={order.id}
-                    onClick={() => startEdit(order)}
-                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") startEdit(order); }}
+                    onClick={() => setSelectedOrderId(order.id)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedOrderId(order.id); }}
                   >
                     <span className="os-list-main">
                       <span className="os-code-line">
@@ -332,11 +344,12 @@ export function ServiceOrdersClient({
                     </span>
                     <span className="os-row-actions" onClick={(event) => event.stopPropagation()}>
                       <Link className="btn mini secondary" href={`/inbox?contact=${order.contactId}`}>Inbox</Link>
+                      <button className="btn mini secondary" type="button" onClick={() => startEdit(order)}>Editar</button>
                       <select className="input mini-select" value={order.status} onChange={(event) => updateStatus(order, event.target.value as ServiceOrderStatus)}>
                         {statusOrder.map((nextStatus) => <option key={nextStatus} value={nextStatus}>{statusLabels[nextStatus]}</option>)}
                       </select>
                     </span>
-                    {deal && <span className="os-linked-deal">{deal.title}</span>}
+                    {deal && <span className="os-linked-deal">Vinculada a: {deal.title}</span>}
                   </div>
                 );
               })}
@@ -344,67 +357,8 @@ export function ServiceOrdersClient({
           )}
         </article>
 
-        <aside className={`card os-detail-panel ${showForm ? "open" : ""}`}>
-          {showForm ? (
-            <>
-              <div className="os-panel-head">
-                <div>
-                  <p className="eyebrow-small">{editingId ? "Editar OS" : "Nova OS"}</p>
-                  <h2>{editingId ? "Detalhes da ordem" : "Criar ordem"}</h2>
-                </div>
-                <button className="btn mini secondary" onClick={closePanel}>Fechar</button>
-              </div>
-
-              <div className="os-form-grid os-form-grid-panel">
-                <label>Cliente
-                  <select className="input" value={form.contactId} onChange={(event) => setForm((current) => ({ ...current, contactId: event.target.value, dealId: "" }))}>
-                    <option value="">Selecione</option>
-                    {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name} · {contact.company || contact.phone}</option>)}
-                  </select>
-                </label>
-                <label>Oportunidade
-                  <select className="input" value={form.dealId} onChange={(event) => setForm((current) => ({ ...current, dealId: event.target.value }))}>
-                    <option value="">Sem vínculo</option>
-                    {deals.filter((deal) => !form.contactId || deal.contactId === form.contactId).map((deal) => <option key={deal.id} value={deal.id}>{deal.title} · {money(deal.value)}</option>)}
-                  </select>
-                </label>
-                <label className="span-2">Serviço / demanda
-                  <input className="input" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
-                </label>
-                <label>Status
-                  <select className="input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as ServiceOrderStatus }))}>
-                    {statusOrder.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
-                  </select>
-                </label>
-                <label>Prioridade
-                  <select className="input" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value as LeadTemperature }))}>
-                    <option value="frio">Baixa</option>
-                    <option value="morno">Média</option>
-                    <option value="quente">Alta</option>
-                  </select>
-                </label>
-                <label>Responsável
-                  <input className="input" value={form.owner} onChange={(event) => setForm((current) => ({ ...current, owner: event.target.value }))} />
-                </label>
-                <label>Previsão
-                  <input className="input" type="datetime-local" value={form.dueAt} onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))} />
-                </label>
-                <label>Valor estimado
-                  <input className="input" value={form.estimatedValue} onChange={(event) => setForm((current) => ({ ...current, estimatedValue: event.target.value }))} />
-                </label>
-                <label>Valor final
-                  <input className="input" value={form.finalValue} onChange={(event) => setForm((current) => ({ ...current, finalValue: event.target.value }))} />
-                </label>
-                <label className="span-2">Descrição do serviço
-                  <textarea className="input" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="O que precisa ser feito?" />
-                </label>
-                <label className="span-2">Observações internas
-                  <textarea className="input" value={form.internalNotes} onChange={(event) => setForm((current) => ({ ...current, internalNotes: event.target.value }))} placeholder="Informações para a equipe, materiais, combinados..." />
-                </label>
-              </div>
-              <button className="btn full" type="button" disabled={saving} onClick={saveOrder}>{saving ? "Salvando..." : editingId ? "Salvar alterações" : "Criar OS"}</button>
-            </>
-          ) : selectedOrder ? (
+        <aside className="card os-detail-panel os-detail-panel-clean">
+          {selectedOrder ? (
             <>
               <div className="os-panel-head">
                 <div>
@@ -423,6 +377,7 @@ export function ServiceOrdersClient({
                   <div><span>Prioridade</span><strong>{priorityLabels[selectedOrder.priority]}</strong></div>
                   <div><span>Valor</span><strong>{money(selectedOrder.finalValue || selectedOrder.estimatedValue)}</strong></div>
                 </div>
+                {selectedDeal && <p className="os-detail-copy">Oportunidade vinculada: <strong>{selectedDeal.title}</strong></p>}
                 {selectedOrder.description && <p className="os-detail-copy">{selectedOrder.description}</p>}
                 {selectedOrder.internalNotes && <p className="os-detail-copy muted">Obs. interna: {selectedOrder.internalNotes}</p>}
                 <div className="os-panel-actions">
@@ -439,6 +394,95 @@ export function ServiceOrdersClient({
           )}
         </aside>
       </section>
+
+      {showForm && (
+        <div className="os-modal-backdrop" role="dialog" aria-modal="true" aria-label={editingId ? "Editar ordem de serviço" : "Criar ordem de serviço"}>
+          <div className="card os-modal-card">
+            <div className="os-panel-head os-modal-head">
+              <div>
+                <p className="eyebrow-small">{editingId ? "Editar OS" : "Nova OS"}</p>
+                <h2>{editingId ? "Ajustar ordem de serviço" : "Conferir antes de criar"}</h2>
+                <p className="muted">Revise cliente, demanda, prazo, valor e observações antes de salvar.</p>
+              </div>
+              <button className="btn mini secondary" onClick={closeForm}>Fechar</button>
+            </div>
+
+            <div className="os-form-preview-strip">
+              <span><small>Cliente</small><strong>{formContact?.name || "Selecione"}</strong></span>
+              <span><small>Empresa</small><strong>{formContact?.company || formContact?.phone || "sem empresa"}</strong></span>
+              <span><small>Oportunidade</small><strong>{formDeal?.title || "Sem vínculo"}</strong></span>
+              <span><small>Próximo número</small><strong>{editingId ? selectedOrder?.code || "OS" : "gerado ao salvar"}</strong></span>
+            </div>
+
+            <div className="os-form-grid os-form-grid-modal">
+              <label>Cliente
+                <select className="input" value={form.contactId} onChange={(event) => {
+                  const contact = contactById.get(event.target.value);
+                  const deal = deals.find((item) => item.contactId === event.target.value && item.status !== "perdido");
+                  setForm((current) => ({
+                    ...current,
+                    contactId: event.target.value,
+                    dealId: deal?.id || "",
+                    title: current.title || deal?.title || "Novo atendimento operacional",
+                    priority: contact?.temperature || current.priority,
+                    owner: contact?.owner || current.owner,
+                    estimatedValue: current.estimatedValue !== "0" ? current.estimatedValue : String(deal?.value || 0),
+                  }));
+                }}>
+                  <option value="">Selecione</option>
+                  {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name} · {contact.company || contact.phone}</option>)}
+                </select>
+              </label>
+              <label>Oportunidade
+                <select className="input" value={form.dealId} onChange={(event) => {
+                  const deal = dealById.get(event.target.value);
+                  setForm((current) => ({ ...current, dealId: event.target.value, title: deal?.title || current.title, estimatedValue: deal ? String(deal.value || 0) : current.estimatedValue }));
+                }}>
+                  <option value="">Sem vínculo</option>
+                  {deals.filter((deal) => !form.contactId || deal.contactId === form.contactId).map((deal) => <option key={deal.id} value={deal.id}>{deal.title} · {money(deal.value)}</option>)}
+                </select>
+              </label>
+              <label className="span-2">Serviço / demanda
+                <input className="input" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Ex: Instalação elétrica, manutenção, landing page..." />
+              </label>
+              <label>Status
+                <select className="input" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as ServiceOrderStatus }))}>
+                  {statusOrder.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+                </select>
+              </label>
+              <label>Prioridade
+                <select className="input" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value as LeadTemperature }))}>
+                  <option value="frio">Baixa</option>
+                  <option value="morno">Média</option>
+                  <option value="quente">Alta</option>
+                </select>
+              </label>
+              <label>Responsável
+                <input className="input" value={form.owner} onChange={(event) => setForm((current) => ({ ...current, owner: event.target.value }))} />
+              </label>
+              <label>Previsão
+                <input className="input" type="datetime-local" value={form.dueAt} onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))} />
+              </label>
+              <label>Valor estimado
+                <input className="input" value={form.estimatedValue} onChange={(event) => setForm((current) => ({ ...current, estimatedValue: event.target.value }))} />
+              </label>
+              <label>Valor final
+                <input className="input" value={form.finalValue} onChange={(event) => setForm((current) => ({ ...current, finalValue: event.target.value }))} />
+              </label>
+              <label className="span-2">Descrição do serviço
+                <textarea className="input" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="O que precisa ser feito?" />
+              </label>
+              <label className="span-2">Observações internas
+                <textarea className="input" value={form.internalNotes} onChange={(event) => setForm((current) => ({ ...current, internalNotes: event.target.value }))} placeholder="Informações para equipe, materiais, combinados, restrições..." />
+              </label>
+            </div>
+            <div className="os-modal-actions">
+              <button className="btn secondary" type="button" onClick={closeForm}>Cancelar</button>
+              <button className="btn" type="button" disabled={saving} onClick={saveOrder}>{saving ? "Salvando..." : editingId ? "Salvar alterações" : "Criar OS"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
