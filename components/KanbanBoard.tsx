@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Contact, Deal, DealStatus, LeadTemperature, Pipeline, Stage } from "@/lib/types";
 import { money } from "@/lib/format";
@@ -36,6 +36,17 @@ type NewDealState = {
   value: string;
   expectedClose: string;
 };
+
+
+const ACTIVE_PIPELINE_STORAGE_KEY = "nextlead.activePipelineId";
+
+function firstPipelineId(pipelines: Pipeline[], stages: Stage[]) {
+  return pipelines[0]?.id || stages[0]?.pipelineId || "";
+}
+
+function isPipelineAvailable(pipelineId: string, pipelines: Pipeline[]) {
+  return Boolean(pipelineId && pipelines.some((pipeline) => pipeline.id === pipelineId));
+}
 
 const temperatureOptions: Array<{ value: "todos" | LeadTemperature; label: string }> = [
   { value: "todos", label: "Todas temperaturas" },
@@ -114,7 +125,7 @@ export function KanbanBoard({
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
   const [pipelines, setPipelines] = useState<Pipeline[]>(initialPipelines);
   const [stages, setStages] = useState<Stage[]>(initialStages);
-  const [activePipelineId, setActivePipelineId] = useState(initialPipelines[0]?.id || initialStages[0]?.pipelineId || "");
+  const [activePipelineId, setActivePipelineId] = useState(firstPipelineId(initialPipelines, initialStages));
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [newPipeline, setNewPipeline] = useState<NewPipelineState | null>(null);
@@ -128,6 +139,30 @@ export function KanbanBoard({
   const [showLost, setShowLost] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const router = useRouter();
+
+  function selectActivePipeline(pipelineId: string) {
+    if (!pipelineId) return;
+    setActivePipelineId(pipelineId);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ACTIVE_PIPELINE_STORAGE_KEY, pipelineId);
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const savedPipelineId = window.localStorage.getItem(ACTIVE_PIPELINE_STORAGE_KEY) || "";
+    if (isPipelineAvailable(savedPipelineId, pipelines)) {
+      setActivePipelineId(savedPipelineId);
+      return;
+    }
+
+    const fallbackPipelineId = firstPipelineId(pipelines, stages);
+    if (fallbackPipelineId && !isPipelineAvailable(activePipelineId, pipelines)) {
+      setActivePipelineId(fallbackPipelineId);
+      window.localStorage.setItem(ACTIVE_PIPELINE_STORAGE_KEY, fallbackPipelineId);
+    }
+  }, [activePipelineId, pipelines, stages]);
 
   const contactsById = useMemo(() => new Map(contacts.map((contact) => [contact.id, contact])), [contacts]);
   const activePipeline = useMemo(() => pipelines.find((pipeline) => pipeline.id === activePipelineId) || pipelines[0], [activePipelineId, pipelines]);
@@ -288,7 +323,7 @@ export function KanbanBoard({
       const createdStages = result.stages as Stage[];
       setPipelines((current) => [...current, createdPipeline]);
       setStages((current) => [...current, ...createdStages]);
-      setActivePipelineId(createdPipeline.id);
+      selectActivePipeline(createdPipeline.id);
       setNewPipeline(null);
       setMessage("Pipeline criado. Agora você pode criar oportunidades nele.");
       router.refresh();
@@ -425,7 +460,7 @@ export function KanbanBoard({
         <div className="pipeline-control-main">
           <p className="eyebrow-small">Pipeline ativo</p>
           <div className="pipeline-select-line">
-            <select className="select pipeline-select" value={activePipeline?.id || ""} onChange={(event) => setActivePipelineId(event.target.value)}>
+            <select className="select pipeline-select" value={activePipeline?.id || ""} onChange={(event) => selectActivePipeline(event.target.value)}>
               {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
             </select>
             <button type="button" className="btn secondary" onClick={() => setNewPipeline({ name: "Pipeline de Protótipos", template: "prototipos", stages: templateStages("prototipos") })}>+ Pipeline</button>

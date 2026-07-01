@@ -7497,3 +7497,86 @@ button:disabled {
   line-height: 1.15;
   text-transform: none;
 }
+
+/* --------------------------------------------------------------------------
+   NextLead CRM — v12.2: ajuste do painel do lead + select de funil seguro
+---------------------------------------------------------------------------- */
+.lead-inspector .lead-status-card {
+  overflow: hidden !important;
+}
+
+.lead-inspector .lead-status-card .inspector-fields {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
+}
+
+.lead-inspector .lead-status-card .action-field {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 6px !important;
+}
+
+.lead-inspector .lead-status-card .action-field span {
+  display: block !important;
+  color: rgba(203, 213, 225, .74) !important;
+  font-size: .64rem !important;
+  font-weight: 950 !important;
+  letter-spacing: .12em !important;
+  text-transform: uppercase !important;
+}
+
+.lead-inspector .lead-status-card .mini-select {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  min-height: 42px !important;
+  padding: 0 38px 0 13px !important;
+  border-radius: 14px !important;
+  color: #f8fbff !important;
+  background:
+    linear-gradient(45deg, transparent 50%, rgba(226, 232, 240, .82) 50%) calc(100% - 18px) 50% / 6px 6px no-repeat,
+    linear-gradient(135deg, rgba(15, 23, 42, .92), rgba(8, 17, 34, .86)) !important;
+  border: 1px solid rgba(148, 163, 184, .20) !important;
+  appearance: none !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.lead-inspector .lead-status-card .mini-select:focus {
+  border-color: rgba(34, 211, 238, .58) !important;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, .10) !important;
+}
+
+.lead-inspector .lead-status-card .inspector-actions {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+}
+
+.lead-inspector .lead-status-card .inspector-actions .btn {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.header-stage-field,
+.header-stage-whatsapp {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.header-stage-field select {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+@media (max-width: 520px) {
+  .lead-inspector .lead-status-card .inspector-actions {
+    grid-template-columns: 1fr !important;
+  }
+}

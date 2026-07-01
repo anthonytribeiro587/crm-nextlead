@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
   const { data: deal, error } = await supabase
     .from("deals")
     .insert(insert)
-    .select("id,contact_id,stage_id,title,value,status,expected_close,lost_reason,created_at")
+    .select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at")
     .single();
 
   if (error) {
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     deal: {
       id: deal.id,
       contactId: deal.contact_id,
-      pipelineId: stage.pipeline_id || undefined,
+      pipelineId: deal.pipeline_id || stage.pipeline_id || undefined,
       stageId: deal.stage_id,
       title: deal.title,
       value: Number(deal.value || 0),
@@ -152,7 +152,7 @@ export async function PATCH(request: NextRequest) {
     .from("deals")
     .update(update)
     .eq("id", dealId)
-    .select("id,contact_id,title,value,status,stage_id,expected_close,lost_reason,created_at")
+    .select("id,contact_id,pipeline_id,title,value,status,stage_id,expected_close,lost_reason,created_at")
     .single();
 
   if (error) {
@@ -182,7 +182,7 @@ export async function PATCH(request: NextRequest) {
       ? {
           id: deal.id,
           contactId: deal.contact_id,
-          pipelineId: selectedStage?.pipeline_id || undefined,
+          pipelineId: deal.pipeline_id || selectedStage?.pipeline_id || undefined,
           stageId: deal.stage_id,
           title: deal.title,
           value: Number(deal.value || 0),

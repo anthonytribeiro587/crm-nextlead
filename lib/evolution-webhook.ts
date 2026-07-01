@@ -80,6 +80,128 @@ function normalizeMessages(payload: any): any[] {
   return [];
 }
 
+function isMessageStatusUpdateEvent(event: string) {
+  const compact = String(event || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return compact.includes("messagesupdate") || compact.includes("messagestatus") || compact.includes("statusupdate");
+}
+
+function extractUpdateMessageId(update: any) {
+  return (
+    update?.key?.id ||
+    update?.data?.key?.id ||
+    update?.message?.key?.id ||
+    update?.update?.key?.id ||
+    update?.keyId ||
+    update?.messageId ||
+    update?.id ||
+    undefined
+  );
+}
+
+function extractRawStatus(update: any) {
+  return (
+    update?.status ??
+    update?.update?.status ??
+    update?.message?.status ??
+    update?.data?.status ??
+    update?.data?.update?.status ??
+    update?.ack ??
+    update?.update?.ack ??
+    undefined
+  );
+}
+
+function normalizeMessageStatus(value: unknown) {
+  if (value === undefined || value === null || value === "") return "";
+
+  const numeric = typeof value === "number" ? value : /^\d+$/.test(String(value)) ? Number(value) : NaN;
+  if (Number.isFinite(numeric)) {
+    if (numeric <= 0) return "failed";
+    if (numeric === 1 || numeric === 2) return "sent";
+    if (numeric === 3) return "delivered";
+    if (numeric >= 4) return "read";
+  }
+
+  const normalized = String(value).trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const map: Record<string, string> = {
+    pending: "queued",
+    queued: "queued",
+    server_ack: "sent",
+    sent: "sent",
+    send: "sent",
+    delivery_ack: "delivered",
+    delivered: "delivered",
+    read: "read",
+    read_ack: "read",
+    played: "read",
+    error: "failed",
+    failed: "failed",
+  };
+
+  return map[normalized] || normalized;
+}
+
+function statusRank(status: string) {
+  const ranks: Record<string, number> = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 99 };
+  return ranks[status] ?? 1;
+}
+
+async function updateOutboundStatusFromEvolution(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  update: any,
+) {
+  const status = normalizeMessageStatus(extractRawStatus(update));
+  if (!status) return false;
+
+  const now = new Date().toISOString();
+  const providerMessageId = extractUpdateMessageId(update);
+
+  if (providerMessageId) {
+    const { data, error } = await supabase
+      .from("messages")
+      .update({ status, updated_at: now })
+      .eq("provider_message_id", providerMessageId)
+      .select("id,status")
+      .limit(1);
+
+    if (!error && data?.length) return true;
+  }
+
+  const key = update?.key || update?.data?.key || update?.message?.key || update?.update?.key || {};
+  const phone = phoneFromKey(key, update?.data || update);
+  if (!phone) return false;
+
+  const variants = brazilPhoneVariants(phone);
+  const { data: possibleContacts } = await supabase
+    .from("contacts")
+    .select("id,phone")
+    .in("phone", variants.length ? variants : [phone])
+    .limit(10);
+
+  const contact = possibleContacts?.find((item: any) => item.phone === phone) || possibleContacts?.[0];
+  if (!contact?.id) return false;
+
+  const { data: latest } = await supabase
+    .from("messages")
+    .select("id,status")
+    .eq("contact_id", contact.id)
+    .eq("direction", "outbound")
+    .neq("status", "failed")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!latest?.id) return false;
+  if (statusRank(String(latest.status || "")) > statusRank(status) && status !== "failed") return true;
+
+  const { error } = await supabase
+    .from("messages")
+    .update({ status, updated_at: now })
+    .eq("id", latest.id);
+
+  return !error;
+}
+
 async function ensureDealForContact(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>, contactId: string, title: string) {
   const { data: existingDeal } = await supabase
     .from("deals")
@@ -208,15 +330,16 @@ export async function persistEvolutionWebhook(payload: any) {
 
   const event = String(payload?.event || "").toLowerCase();
 
-  if (event.includes("messages.update")) {
+  if (isMessageStatusUpdateEvent(event)) {
     const updates = normalizeMessages(payload);
+    let statusUpdates = 0;
+
     for (const update of updates) {
-      const id = update?.key?.id || update?.keyId || update?.id;
-      const status = update?.status || update?.update?.status || update?.message?.status;
-      if (!id || !status) continue;
-      await supabase.from("messages").update({ status, updated_at: new Date().toISOString() }).eq("provider_message_id", id);
+      const updated = await updateOutboundStatusFromEvolution(supabase, update);
+      if (updated) statusUpdates += 1;
     }
-    return { persisted: true, messages: 0, statusUpdates: updates.length };
+
+    return { persisted: true, messages: 0, statusUpdates };
   }
 
   const messages = normalizeMessages(payload);

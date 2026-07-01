@@ -135,7 +135,7 @@ export async function getCrmData(): Promise<CrmData> {
 
   const pipelinesPromise = supabase.from("pipelines").select("id,name,created_at").order("created_at", { ascending: true });
   const stagesPromise = supabase.from("pipeline_stages").select("id,pipeline_id,title,position,color").order("position", { ascending: true });
-  const dealsPromise = supabase.from("deals").select("id,contact_id,stage_id,title,value,status,expected_close,lost_reason,created_at").order("created_at", { ascending: false }).limit(200);
+  const dealsPromise = supabase.from("deals").select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at").order("created_at", { ascending: false }).limit(200);
   let messagesPromise: any = supabase.from("messages").select("id,contact_id,direction,body,type,status,provider_message_id,raw_payload,created_at").order("created_at", { ascending: true }).limit(500);
   const activitiesPromise = supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(300);
   const serviceOrdersPromise = supabase

@@ -17,7 +17,32 @@ function tomorrowBusinessTime() {
   return formatDateTimeLocal(date);
 }
 
+function normalizeUiMessageStatus(status: unknown) {
+  if (status === undefined || status === null || status === "") return "sent";
+
+  const numeric = typeof status === "number" ? status : /^\d+$/.test(String(status)) ? Number(status) : NaN;
+  if (Number.isFinite(numeric)) {
+    if (numeric <= 0) return "failed";
+    if (numeric === 1 || numeric === 2) return "sent";
+    if (numeric === 3) return "delivered";
+    if (numeric >= 4) return "read";
+  }
+
+  const normalized = String(status).trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const map: Record<string, string> = {
+    pending: "queued",
+    server_ack: "sent",
+    delivery_ack: "delivered",
+    read_ack: "read",
+    played: "read",
+    error: "failed",
+  };
+
+  return map[normalized] || normalized;
+}
+
 function messageStatusLabel(status: string) {
+  const normalized = normalizeUiMessageStatus(status);
   const map: Record<string, string> = {
     queued: "enviando",
     sent: "enviado",
@@ -26,7 +51,7 @@ function messageStatusLabel(status: string) {
     read: "lido",
     failed: "falhou",
   };
-  return map[status] || status;
+  return map[normalized] || normalized;
 }
 
 function firstName(name?: string) {
