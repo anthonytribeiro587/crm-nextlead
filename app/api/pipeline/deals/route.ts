@@ -21,6 +21,77 @@ function cleanDate(value: unknown) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined;
 }
 
+
+export async function POST(request: NextRequest) {
+  const payload = await request.json().catch(() => ({}));
+  const contactId = String(payload.contactId || payload.contact_id || "").trim();
+  const stageId = String(payload.stageId || payload.stage_id || "").trim();
+  const title = String(payload.title || "Nova oportunidade").trim() || "Nova oportunidade";
+
+  if (!contactId || !stageId) {
+    return NextResponse.json({ error: "contactId e stageId são obrigatórios." }, { status: 400 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json({
+      ok: true,
+      demo: true,
+      deal: {
+        id: `demo-deal-${Date.now()}`,
+        contactId,
+        stageId,
+        title,
+        value: parseMoney(payload.value) || 0,
+        status: "aberto",
+        expectedClose: String(payload.expectedClose || "") || undefined,
+        createdAt: new Date().toISOString(),
+      },
+    });
+  }
+
+  const value = parseMoney(payload.value) || 0;
+  const expectedClose = cleanDate(payload.expectedClose ?? payload.expected_close);
+
+  const insert: Record<string, any> = {
+    contact_id: contactId,
+    stage_id: stageId,
+    title,
+    value,
+    status: "aberto",
+    source: "Funil",
+    updated_at: new Date().toISOString(),
+  };
+  if (expectedClose) insert.expected_close = expectedClose;
+
+  const { data: deal, error } = await supabase
+    .from("deals")
+    .insert(insert)
+    .select("id,contact_id,stage_id,title,value,status,expected_close,lost_reason,created_at")
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  await logCommercialActivity(supabase, { contactId, title: `Oportunidade criada: ${title}`, done: true });
+
+  return NextResponse.json({
+    ok: true,
+    deal: {
+      id: deal.id,
+      contactId: deal.contact_id,
+      stageId: deal.stage_id,
+      title: deal.title,
+      value: Number(deal.value || 0),
+      status: deal.status || "aberto",
+      expectedClose: deal.expected_close || undefined,
+      lostReason: deal.lost_reason || undefined,
+      createdAt: deal.created_at || new Date().toISOString(),
+    },
+  });
+}
+
 export async function PATCH(request: NextRequest) {
   const payload = await request.json();
   const { dealId, stageId, status, lostReason, title } = payload;

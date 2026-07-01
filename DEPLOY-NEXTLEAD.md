@@ -17,3 +17,10 @@ Depois do deploy, testar:
 4. Editar valor/previsão.
 5. Alternar Kanban/Lista.
 6. Filtrar por responsável, temperatura e prazo.
+
+## Patch: funil operacional + múltiplos pipelines
+
+1. Suba este pacote no repositório `crm-nextlead`.
+2. Rode `scripts/migration-v4-multiple-pipelines.sql` no Supabase.
+3. Faça deploy na Vercel.
+4. Teste `/funil`: criar pipeline, alternar pipeline, criar oportunidade e mover card.

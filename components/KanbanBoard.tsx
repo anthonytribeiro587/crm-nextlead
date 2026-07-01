@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Contact, Deal, DealStatus, LeadTemperature, Stage } from "@/lib/types";
+import type { Contact, Deal, DealStatus, LeadTemperature, Pipeline, Stage } from "@/lib/types";
 import { money } from "@/lib/format";
+import { PIPELINE_TEMPLATES, type PipelineTemplateKey } from "@/lib/pipeline-templates";
 
 type EditingState = {
   deal: Deal;
@@ -17,6 +18,18 @@ type EditingState = {
 };
 
 type ViewMode = "board" | "list";
+
+type NewPipelineState = {
+  name: string;
+  template: PipelineTemplateKey;
+};
+
+type NewDealState = {
+  contactId: string;
+  title: string;
+  value: string;
+  expectedClose: string;
+};
 
 const temperatureOptions: Array<{ value: "todos" | LeadTemperature; label: string }> = [
   { value: "todos", label: "Todas temperaturas" },
@@ -64,11 +77,26 @@ function sortByPriority(deals: Deal[], contactsById: Map<string, Contact>) {
   });
 }
 
-export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, stages }: { contacts: Contact[]; deals: Deal[]; stages: Stage[] }) {
+export function KanbanBoard({
+  contacts: initialContacts,
+  deals: initialDeals,
+  pipelines: initialPipelines,
+  stages: initialStages,
+}: {
+  contacts: Contact[];
+  deals: Deal[];
+  pipelines: Pipeline[];
+  stages: Stage[];
+}) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts);
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
+  const [pipelines, setPipelines] = useState<Pipeline[]>(initialPipelines);
+  const [stages, setStages] = useState<Stage[]>(initialStages);
+  const [activePipelineId, setActivePipelineId] = useState(initialPipelines[0]?.id || initialStages[0]?.pipelineId || "");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditingState | null>(null);
+  const [newPipeline, setNewPipeline] = useState<NewPipelineState | null>(null);
+  const [newDeal, setNewDeal] = useState<NewDealState | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -80,8 +108,19 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
   const router = useRouter();
 
   const contactsById = useMemo(() => new Map(contacts.map((contact) => [contact.id, contact])), [contacts]);
-  const closedStageId = useMemo(() => stages.find((stage) => stage.title.toLowerCase().includes("fechado"))?.id || stages[stages.length - 1]?.id || "", [stages]);
-  const firstStageId = stages[0]?.id || "";
+  const activePipeline = useMemo(() => pipelines.find((pipeline) => pipeline.id === activePipelineId) || pipelines[0], [activePipelineId, pipelines]);
+  const activeStages = useMemo(() => {
+    const fallbackPipelineId = activePipeline?.id || activePipelineId;
+    const filtered = stages.filter((stage) => stage.pipelineId === fallbackPipelineId || (!stage.pipelineId && fallbackPipelineId === activePipelineId));
+    return filtered.sort((a, b) => a.order - b.order);
+  }, [activePipeline?.id, activePipelineId, stages]);
+  const activeStageIds = useMemo(() => new Set(activeStages.map((stage) => stage.id)), [activeStages]);
+  const firstStageId = activeStages[0]?.id || stages[0]?.id || "";
+  const closedStageId = useMemo(
+    () => activeStages.find((stage) => stage.title.toLowerCase().includes("fechado") || stage.title.toLowerCase().includes("aprovado"))?.id || activeStages[activeStages.length - 1]?.id || "",
+    [activeStages],
+  );
+
   const owners = useMemo(() => {
     const preferred = ["Anthony", "Felipe"];
     const current = contacts.map((contact) => contact.owner || "NextLead").filter(Boolean);
@@ -99,6 +138,7 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
 
     return deals.filter((deal) => {
       const contact = contactsById.get(deal.contactId);
+      if (!activeStageIds.has(deal.stageId)) return false;
       if (!showLost && deal.status === "perdido") return false;
       if (ownerFilter !== "todos" && (contact?.owner || "NextLead") !== ownerFilter) return false;
       if (temperatureFilter !== "todos" && (contact?.temperature || "morno") !== temperatureFilter) return false;
@@ -114,13 +154,13 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
         .toLowerCase();
       return haystack.includes(normalizedQuery);
     });
-  }, [ageFilter, contactsById, deals, ownerFilter, query, showLost, temperatureFilter]);
+  }, [activeStageIds, ageFilter, contactsById, deals, ownerFilter, query, showLost, temperatureFilter]);
 
   const priorityDeals = useMemo(() => sortByPriority(visibleDeals.filter((deal) => deal.status === "aberto"), contactsById), [contactsById, visibleDeals]);
   const pipelineValue = visibleDeals.filter((deal) => deal.status === "aberto").reduce((sum, deal) => sum + deal.value, 0);
   const staleDeals = visibleDeals.filter((deal) => (daysSince(contactsById.get(deal.contactId)?.lastMessageAt) || 0) >= 7).length;
-  const proposalDeals = visibleDeals.filter((deal) => stageLabel(stages, deal.stageId).toLowerCase().includes("proposta")).length;
-  const wonDeals = deals.filter((deal) => deal.status === "ganho").length;
+  const proposalDeals = visibleDeals.filter((deal) => stageLabel(activeStages, deal.stageId).toLowerCase().includes("proposta")).length;
+  const wonDeals = visibleDeals.filter((deal) => deal.status === "ganho" || deal.stageId === closedStageId).length;
   const activeDealsCount = visibleDeals.filter((deal) => deal.status === "aberto").length;
 
   async function patchDeal(dealId: string, payload: Record<string, unknown>) {
@@ -202,6 +242,59 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
     }
   }
 
+  async function createPipeline(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newPipeline) return;
+    setSaving(true);
+    setMessage("Criando pipeline...");
+    try {
+      const response = await fetch("/api/pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newPipeline),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erro ao criar pipeline.");
+
+      const createdPipeline = result.pipeline as Pipeline;
+      const createdStages = result.stages as Stage[];
+      setPipelines((current) => [...current, createdPipeline]);
+      setStages((current) => [...current, ...createdStages]);
+      setActivePipelineId(createdPipeline.id);
+      setNewPipeline(null);
+      setMessage("Pipeline criado. Agora você pode criar oportunidades nele.");
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Erro ao criar pipeline.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createDeal(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!newDeal || !firstStageId) return;
+    setSaving(true);
+    setMessage("Criando oportunidade...");
+    try {
+      const response = await fetch("/api/pipeline/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newDeal, stageId: firstStageId }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erro ao criar oportunidade.");
+      setDeals((current) => [result.deal as Deal, ...current]);
+      setNewDeal(null);
+      setMessage("Oportunidade criada no pipeline ativo.");
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Erro ao criar oportunidade.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function markAsWon(deal: Deal) {
     setDeals((current) => current.map((item) => (item.id === deal.id ? { ...item, status: "ganho", stageId: closedStageId } : item)));
     patchDeal(deal.id, { status: "ganho", stageId: closedStageId })
@@ -250,12 +343,22 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
     }
   }
 
+  function openNewDeal() {
+    const contact = contacts[0];
+    setNewDeal({
+      contactId: contact?.id || "",
+      title: activePipeline?.name?.toLowerCase().includes("prot") ? "Protótipo de Landing Page" : "Orçamento de Landing Page",
+      value: "0",
+      expectedClose: "",
+    });
+  }
+
   function DealCard({ deal }: { deal: Deal }) {
     const contact = contactsById.get(deal.contactId);
     const idleDays = daysSince(contact?.lastMessageAt);
     return (
       <article
-        className={`deal-card deal-card-pro deal-card-pro-v2 ${deal.status === "perdido" ? "lost" : ""}`}
+        className={`deal-card deal-card-pro deal-card-lean ${deal.status === "perdido" ? "lost" : ""}`}
         draggable
         onDragStart={() => setDraggingId(deal.id)}
         onDragEnd={() => setDraggingId(null)}
@@ -289,22 +392,28 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
 
   return (
     <>
-      <div className="pipeline-command card pipeline-command-v2">
-        <div className="pipeline-command-main-v2">
+      <div className="pipeline-control-panel card">
+        <div className="pipeline-control-main">
           <p className="eyebrow-small">Pipeline ativo</p>
-          <h2>Comercial NextLead</h2>
-          <p className="muted">Etapas de venda com foco em retorno rápido, proposta e fechamento.</p>
+          <div className="pipeline-select-line">
+            <select className="select pipeline-select" value={activePipeline?.id || ""} onChange={(event) => setActivePipelineId(event.target.value)}>
+              {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
+            </select>
+            <button type="button" className="btn secondary" onClick={() => setNewPipeline({ name: "Pipeline de Protótipos", template: "prototipos" })}>+ Pipeline</button>
+            <button type="button" className="btn" onClick={openNewDeal} disabled={!contacts.length || !firstStageId}>+ Oportunidade</button>
+          </div>
+          <p className="muted">Use pipelines separados para comercial, protótipos, pós-venda ou execução. Cada pipeline tem etapas próprias.</p>
         </div>
-        <div className="pipeline-kpis-v2" aria-label="Resumo do funil">
+        <div className="pipeline-control-kpis" aria-label="Resumo do funil">
           <span><strong>{activeDealsCount}</strong><small>ativas</small></span>
-          <span><strong>{proposalDeals}</strong><small>em proposta</small></span>
+          <span><strong>{proposalDeals}</strong><small>propostas</small></span>
           <span><strong>{staleDeals}</strong><small>paradas +7d</small></span>
-          <span><strong>{wonDeals}</strong><small>fechadas</small></span>
+          <span><strong>{wonDeals}</strong><small>ganhas</small></span>
           <b>{money(pipelineValue)}</b>
         </div>
       </div>
 
-      <div className="pipeline-toolbar card pipeline-toolbar-v2">
+      <div className="pipeline-toolbar card pipeline-toolbar-v2 pipeline-toolbar-lean">
         <input className="input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar lead, empresa, telefone..." />
         <select className="select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
           <option value="todos">Todos responsáveis</option>
@@ -330,25 +439,25 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
 
       {message && <div className="inline-alert">{message}</div>}
 
-      <div className="pipeline-priority-strip-v2 card">
-        <div>
-          <p className="eyebrow-small">Próximo movimento</p>
-          <strong>{priorityDeals[0] ? priorityDeals[0].title : "Nenhuma oportunidade pendente"}</strong>
-          <span>{priorityDeals[0] ? `${contactsById.get(priorityDeals[0].contactId)?.name || "Lead"} • ${stageLabel(stages, priorityDeals[0].stageId)}` : "O funil está limpo para novos contatos."}</span>
+      {priorityDeals[0] && (
+        <div className="pipeline-next-compact">
+          <span>Próximo:</span>
+          <strong>{priorityDeals[0].title}</strong>
+          <small>{contactsById.get(priorityDeals[0].contactId)?.name || "Lead"} • {stageLabel(activeStages, priorityDeals[0].stageId)}</small>
+          <Link className="btn mini secondary" href={`/inbox?contact=${priorityDeals[0].contactId}`}>Abrir atendimento</Link>
         </div>
-        {priorityDeals[0] && <Link className="btn secondary" href={`/inbox?contact=${priorityDeals[0].contactId}`}>Abrir atendimento</Link>}
-      </div>
+      )}
 
       {viewMode === "board" ? (
-        <div className="pipeline pipeline-pro pipeline-pro-v2" aria-label="Funil de vendas">
-          {stages.map((stage) => {
+        <div className="pipeline pipeline-pro pipeline-pro-v2 pipeline-board-lean" aria-label="Funil de vendas">
+          {activeStages.map((stage) => {
             const stageDeals = visibleDeals.filter((deal) => deal.stageId === stage.id);
             const total = stageDeals.reduce((sum, deal) => sum + deal.value, 0);
 
             return (
               <section
                 key={stage.id}
-                className={`stage stage-pro stage-pro-v2 ${draggingId ? "stage-drop-ready" : ""}`}
+                className={`stage stage-pro stage-pro-v2 stage-lean ${draggingId ? "stage-drop-ready" : ""}`}
                 style={{ "--stage-color": stage.color } as React.CSSProperties}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => {
@@ -356,7 +465,7 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
                   setDraggingId(null);
                 }}
               >
-                <div className="stage-head stage-head-pro stage-head-pro-v2">
+                <div className="stage-head stage-head-pro stage-head-pro-v2 stage-head-lean">
                   <div>
                     <span className="stage-title">
                       <span className="dot" style={{ background: stage.color }} />
@@ -368,7 +477,7 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
                 </div>
 
                 <div className="stage-card-list stage-card-list-v2">
-                  {stageDeals.length === 0 && <div className="stage-empty stage-empty-v2">Solte uma oportunidade aqui</div>}
+                  {stageDeals.length === 0 && <div className="stage-empty stage-empty-v2">Solte aqui</div>}
                   {stageDeals.map((deal) => <DealCard key={deal.id} deal={deal} />)}
                 </div>
               </section>
@@ -395,7 +504,7 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
                     <strong>{deal.title}</strong>
                     <p>{contact?.name || "Lead"} • {contact?.company || "sem empresa"}</p>
                   </div>
-                  <span>{stageLabel(stages, deal.stageId)}</span>
+                  <span>{stageLabel(activeStages, deal.stageId)}</span>
                   <span>{contact?.owner || "NextLead"}</span>
                   <b>{money(deal.value)}</b>
                   <div>
@@ -409,14 +518,77 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
         </div>
       )}
 
-      <div className="pipeline-custom-note-v2 card">
-        <div>
-          <p className="eyebrow-small">Próximo módulo</p>
-          <h2>Pipelines por processo</h2>
-          <p className="muted">Depois deste ajuste visual, o próximo passo é permitir pipelines como Comercial, Protótipos e OS, cada um com etapas próprias.</p>
+      {newPipeline && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Criar pipeline">
+          <form className="modal-card modal-card-compact" onSubmit={createPipeline}>
+            <div className="topbar" style={{ marginBottom: 14 }}>
+              <div>
+                <p className="eyebrow">Novo pipeline</p>
+                <h2>Criar processo</h2>
+              </div>
+              <button type="button" className="btn mini secondary" onClick={() => setNewPipeline(null)}>Fechar</button>
+            </div>
+            <label className="form-row">
+              Nome do pipeline
+              <input className="input" value={newPipeline.name} onChange={(event) => setNewPipeline({ ...newPipeline, name: event.target.value })} />
+            </label>
+            <label className="form-row" style={{ marginTop: 12 }}>
+              Modelo inicial
+              <select className="select" value={newPipeline.template} onChange={(event) => setNewPipeline({ ...newPipeline, template: event.target.value as PipelineTemplateKey })}>
+                {Object.entries(PIPELINE_TEMPLATES).map(([key, template]) => (
+                  <option key={key} value={key}>{template.label}</option>
+                ))}
+              </select>
+            </label>
+            <div className="template-preview">
+              {PIPELINE_TEMPLATES[newPipeline.template].stages.map((stage) => <span key={stage.title}>{stage.title}</span>)}
+            </div>
+            <div className="actions" style={{ marginTop: 16 }}>
+              <button className="btn" type="submit" disabled={saving}>{saving ? "Criando..." : "Criar pipeline"}</button>
+              <button className="btn secondary" type="button" onClick={() => setNewPipeline(null)}>Cancelar</button>
+            </div>
+          </form>
         </div>
-        <span>sem mexer no banco neste commit</span>
-      </div>
+      )}
+
+      {newDeal && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Criar oportunidade">
+          <form className="modal-card modal-card-compact" onSubmit={createDeal}>
+            <div className="topbar" style={{ marginBottom: 14 }}>
+              <div>
+                <p className="eyebrow">Nova oportunidade</p>
+                <h2>{activePipeline?.name || "Pipeline"}</h2>
+              </div>
+              <button type="button" className="btn mini secondary" onClick={() => setNewDeal(null)}>Fechar</button>
+            </div>
+            <label className="form-row">
+              Cliente
+              <select className="select" value={newDeal.contactId} onChange={(event) => setNewDeal({ ...newDeal, contactId: event.target.value })}>
+                {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name} • {contact.company || "sem empresa"}</option>)}
+              </select>
+            </label>
+            <label className="form-row" style={{ marginTop: 12 }}>
+              Título
+              <input className="input" value={newDeal.title} onChange={(event) => setNewDeal({ ...newDeal, title: event.target.value })} />
+            </label>
+            <div className="form-grid" style={{ marginTop: 12 }}>
+              <label className="form-row">
+                Valor
+                <input className="input" type="number" min="0" step="50" value={newDeal.value} onChange={(event) => setNewDeal({ ...newDeal, value: event.target.value })} />
+              </label>
+              <label className="form-row">
+                Previsão
+                <input className="input" type="date" value={newDeal.expectedClose} onChange={(event) => setNewDeal({ ...newDeal, expectedClose: event.target.value })} />
+              </label>
+            </div>
+            <p className="muted" style={{ marginTop: 12 }}>Será criada na primeira etapa: {stageLabel(activeStages, firstStageId)}.</p>
+            <div className="actions" style={{ marginTop: 16 }}>
+              <button className="btn" type="submit" disabled={saving || !newDeal.contactId}>{saving ? "Criando..." : "Criar oportunidade"}</button>
+              <button className="btn secondary" type="button" onClick={() => setNewDeal(null)}>Cancelar</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {editing && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Editar oportunidade">
@@ -445,7 +617,7 @@ export function KanbanBoard({ contacts: initialContacts, deals: initialDeals, st
               <label className="form-row">
                 Etapa do funil
                 <select className="select" value={editing.stageId} onChange={(event) => setEditing({ ...editing, stageId: event.target.value })}>
-                  {stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.title}</option>)}
+                  {activeStages.map((stage) => <option key={stage.id} value={stage.id}>{stage.title}</option>)}
                 </select>
               </label>
               <label className="form-row">

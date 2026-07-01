@@ -15,7 +15,7 @@ export const DEFAULT_STAGES = [
 export async function ensureDefaultPipeline(supabase: SupabaseClient) {
   await supabase
     .from("pipelines")
-    .upsert({ id: DEFAULT_PIPELINE_ID, name: "Funil principal" }, { onConflict: "id" });
+    .upsert({ id: DEFAULT_PIPELINE_ID, name: "Comercial NextLead" }, { onConflict: "id" });
 
   await supabase
     .from("pipeline_stages")

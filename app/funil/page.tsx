@@ -6,7 +6,7 @@ import { KanbanBoard } from "@/components/KanbanBoard";
 import { getCrmData } from "@/lib/data";
 
 export default async function FunilPage() {
-  const { contacts, deals, stages } = await getCrmData();
+  const { contacts, deals, pipelines, stages } = await getCrmData();
 
   return (
     <div className="pipeline-page-v2">
@@ -21,7 +21,7 @@ export default async function FunilPage() {
           <Link className="btn" href="/inbox">Abrir Inbox</Link>
         </div>
       </div>
-      <KanbanBoard contacts={contacts} deals={deals} stages={stages} />
+      <KanbanBoard contacts={contacts} deals={deals} pipelines={pipelines} stages={stages} />
     </div>
   );
 }

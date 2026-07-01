@@ -1,12 +1,21 @@
-import type { Activity, Contact, Deal, Message, ServiceOrder, Stage } from "./types";
+import type { Activity, Contact, Deal, Message, Pipeline, ServiceOrder, Stage } from "./types";
+
+export const pipelines: Pipeline[] = [
+  { id: "pipe-comercial", name: "Comercial NextLead", description: "Venda, proposta e fechamento." },
+  { id: "pipe-prototipos", name: "Protótipos", description: "Criação e aprovação de prévias." },
+];
 
 export const stages: Stage[] = [
-  { id: "novo", title: "Novo lead", order: 1, color: "#3b82f6" },
-  { id: "contato", title: "Contato feito", order: 2, color: "#06b6d4" },
-  { id: "diagnostico", title: "Diagnóstico", order: 3, color: "#8b5cf6" },
-  { id: "proposta", title: "Proposta enviada", order: 4, color: "#f59e0b" },
-  { id: "negociacao", title: "Negociação", order: 5, color: "#ec4899" },
-  { id: "fechado", title: "Fechado", order: 6, color: "#22c55e" },
+  { id: "novo", pipelineId: "pipe-comercial", title: "Novo lead", order: 1, color: "#3b82f6" },
+  { id: "contato", pipelineId: "pipe-comercial", title: "Contato feito", order: 2, color: "#06b6d4" },
+  { id: "diagnostico", pipelineId: "pipe-comercial", title: "Diagnóstico", order: 3, color: "#8b5cf6" },
+  { id: "proposta", pipelineId: "pipe-comercial", title: "Proposta enviada", order: 4, color: "#f59e0b" },
+  { id: "negociacao", pipelineId: "pipe-comercial", title: "Negociação", order: 5, color: "#ec4899" },
+  { id: "fechado", pipelineId: "pipe-comercial", title: "Fechado", order: 6, color: "#22c55e" },
+  { id: "proto-briefing", pipelineId: "pipe-prototipos", title: "Briefing", order: 1, color: "#38bdf8" },
+  { id: "proto-criacao", pipelineId: "pipe-prototipos", title: "Em criação", order: 2, color: "#8b5cf6" },
+  { id: "proto-revisao", pipelineId: "pipe-prototipos", title: "Revisão", order: 3, color: "#f59e0b" },
+  { id: "proto-aprovado", pipelineId: "pipe-prototipos", title: "Aprovado", order: 4, color: "#22c55e" },
 ];
 
 export const contacts: Contact[] = [

@@ -13,8 +13,16 @@ export type ServiceOrderStatus =
   | "entregue"
   | "cancelada";
 
+export interface Pipeline {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+}
+
 export interface Stage {
   id: string;
+  pipelineId?: string;
   title: string;
   order: number;
   color: string;

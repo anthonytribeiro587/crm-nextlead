@@ -4,16 +4,18 @@ import { ensureDefaultPipeline } from "./default-pipeline";
 import {
   activities as mockActivities,
   contacts as mockContacts,
+  pipelines as mockPipelines,
   deals as mockDeals,
   messages as mockMessages,
   serviceOrders as mockServiceOrders,
   stages as mockStages,
 } from "./mock-data";
-import type { Activity, Contact, Deal, Message, ServiceOrder, Stage } from "./types";
+import type { Activity, Contact, Deal, Message, Pipeline, ServiceOrder, Stage } from "./types";
 
 export type CrmData = {
   contacts: Contact[];
   deals: Deal[];
+  pipelines: Pipeline[];
   stages: Stage[];
   messages: Message[];
   activities: Activity[];
@@ -27,6 +29,7 @@ export type CrmData = {
 const emptyData: CrmData = {
   contacts: [],
   deals: [],
+  pipelines: mockPipelines,
   stages: mockStages,
   messages: [],
   activities: [],
@@ -39,6 +42,7 @@ function fallbackData(error?: string): CrmData {
   return {
     contacts: mockContacts,
     deals: mockDeals,
+    pipelines: mockPipelines,
     stages: mockStages,
     messages: mockMessages,
     activities: mockActivities,
@@ -129,7 +133,8 @@ export async function getCrmData(): Promise<CrmData> {
 
   await ensureDefaultPipeline(supabase);
 
-  const stagesPromise = supabase.from("pipeline_stages").select("id,title,position,color").order("position", { ascending: true });
+  const pipelinesPromise = supabase.from("pipelines").select("id,name,created_at").order("created_at", { ascending: true });
+  const stagesPromise = supabase.from("pipeline_stages").select("id,pipeline_id,title,position,color").order("position", { ascending: true });
   const dealsPromise = supabase.from("deals").select("id,contact_id,stage_id,title,value,status,expected_close,lost_reason,created_at").order("created_at", { ascending: false }).limit(200);
   let messagesPromise: any = supabase.from("messages").select("id,contact_id,direction,body,type,status,provider_message_id,raw_payload,created_at").order("created_at", { ascending: true }).limit(500);
   const activitiesPromise = supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(300);
@@ -156,7 +161,8 @@ export async function getCrmData(): Promise<CrmData> {
       .limit(300);
   }
 
-  const [stagesResult, dealsResult, messagesResult, activitiesResult, serviceOrdersResult] = await Promise.all([
+  const [pipelinesResult, stagesResult, dealsResult, messagesResult, activitiesResult, serviceOrdersResult] = await Promise.all([
+    pipelinesPromise,
     stagesPromise,
     dealsPromise,
     messagesPromise,
@@ -171,6 +177,7 @@ export async function getCrmData(): Promise<CrmData> {
   );
 
   const errors = [
+    pipelinesResult.error?.message,
     stagesResult.error?.message,
     contactsResult.error?.message,
     dealsResult.error?.message,
@@ -184,8 +191,15 @@ export async function getCrmData(): Promise<CrmData> {
     return fallbackData(errors.join(" | "));
   }
 
+  const pipelines: Pipeline[] = (pipelinesResult.data || []).map((pipeline: any) => ({
+    id: pipeline.id,
+    name: pipeline.name || "Pipeline",
+    createdAt: pipeline.created_at || undefined,
+  }));
+
   const stages: Stage[] = (stagesResult.data || []).map((stage: any) => ({
     id: stage.id,
+    pipelineId: stage.pipeline_id || undefined,
     title: stage.title,
     order: stage.position,
     color: stage.color || "#4f8cff",
@@ -243,6 +257,7 @@ export async function getCrmData(): Promise<CrmData> {
 
   return {
     ...emptyData,
+    pipelines: pipelines.length ? pipelines : mockPipelines,
     stages: stages.length ? stages : mockStages,
     contacts,
     deals,
