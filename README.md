@@ -93,3 +93,32 @@ NEXTLEAD_ENABLE_AUTO_SDR=true
 ```
 
 Sem `GEMINI_API_KEY`, o SDR funciona com análise local simples e modo sugestão.
+
+## v14.5 — Automações SDR UX
+
+A tela de Automações foi simplificada para o uso do Agente SDR NextLead.
+
+### Ativar banco de automações
+
+Rode no Supabase:
+
+```sql
+scripts/migration-v7-automations-sdr.sql
+```
+
+### Ativar Gemini
+
+No Google AI Studio, gere uma chave de API e adicione na Vercel:
+
+```env
+GEMINI_API_KEY=sua_chave
+GEMINI_MODEL=gemini-1.5-flash
+```
+
+Depois faça redeploy.
+
+### Modos do SDR
+
+- Desligado: não analisa nem sugere.
+- Sugerir resposta: recomendado para testes. A IA gera a sugestão e o atendente envia manualmente.
+- Responder automático: exige `NEXTLEAD_ENABLE_AUTO_SDR=true` e deve ser usado só depois de validar a qualidade das respostas.

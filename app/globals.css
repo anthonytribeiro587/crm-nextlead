@@ -9840,3 +9840,245 @@ button:disabled {
 .sdr-assistant-note {
   white-space: pre-line;
 }
+
+/* v14.5 — Automações SDR UX */
+.automation-heading-v15 .actions {
+  align-items: center;
+}
+
+.setup-needed-card-v15 {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  border-color: rgba(245, 158, 11, .32);
+  background: linear-gradient(145deg, rgba(245, 158, 11, .12), rgba(12, 22, 42, .80));
+}
+
+.setup-needed-card-v15 code {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  color: var(--text);
+  background: rgba(0, 0, 0, .20);
+  border: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.setup-needed-card-v15 small {
+  color: var(--muted);
+}
+
+.automation-summary-v15 {
+  margin-bottom: 14px;
+}
+
+.automation-main-v15.standard-grid-v14.two {
+  align-items: start;
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr);
+}
+
+.automation-side-v15 {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.automation-sdr-v15 {
+  display: grid;
+  gap: 18px;
+}
+
+.automation-form-v15 {
+  gap: 14px;
+}
+
+.mode-choice-group-v15 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mode-choice-v15 {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 124px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .035);
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+  cursor: pointer;
+}
+
+.mode-choice-v15:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.mode-choice-v15 input {
+  position: absolute;
+  inset: 12px 12px auto auto;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-2);
+}
+
+.mode-choice-v15 strong {
+  display: block;
+  padding-right: 24px;
+  margin-bottom: 7px;
+  color: var(--text);
+  font-size: .96rem;
+  letter-spacing: -.025em;
+}
+
+.mode-choice-v15 small {
+  display: block;
+  color: var(--muted);
+  line-height: 1.42;
+  font-size: .82rem;
+}
+
+.mode-choice-v15:has(input:checked) {
+  border-color: rgba(0, 216, 255, .48);
+  background: linear-gradient(145deg, rgba(47, 107, 255, .20), rgba(0, 216, 255, .08));
+  box-shadow: 0 16px 46px rgba(0, 216, 255, .10);
+}
+
+.mode-choice-v15.recommended::after {
+  content: "recomendado";
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #a7f3d0;
+  background: rgba(34, 197, 94, .13);
+  border: 1px solid rgba(34, 197, 94, .20);
+  font-size: .68rem;
+  font-weight: 950;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.automation-enabled-v15 {
+  justify-content: flex-start;
+  padding: 8px 0 0;
+}
+
+.automation-save-v15 {
+  width: fit-content;
+  min-width: 230px;
+}
+
+.automation-flow-v15 {
+  margin-top: 2px;
+}
+
+.gemini-card-v15 {
+  border-color: rgba(47, 107, 255, .22);
+}
+
+.gemini-steps-v15 {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.gemini-steps-v15 div,
+.gemini-env-v15 {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.035);
+  color: var(--muted);
+  line-height: 1.42;
+}
+
+.gemini-steps-v15 svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--primary-2);
+}
+
+.gemini-steps-v15 code {
+  color: var(--text);
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 1px 5px;
+}
+
+.gemini-env-v15 {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.gemini-env-v15 strong {
+  color: var(--text);
+}
+
+.gemini-env-v15 small {
+  color: var(--muted-2);
+}
+
+.automation-template-list-v15 .automation-template-item {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.automation-history-v15 {
+  margin-top: 14px;
+}
+
+:root[data-theme="light"] .setup-needed-card-v15 {
+  background: #fff8eb;
+  border-color: #fed7aa;
+}
+
+:root[data-theme="light"] .setup-needed-card-v15 code,
+:root[data-theme="light"] .mode-choice-v15,
+:root[data-theme="light"] .gemini-steps-v15 div,
+:root[data-theme="light"] .gemini-env-v15 {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+:root[data-theme="light"] .mode-choice-v15:has(input:checked) {
+  background: #eff6ff;
+  border-color: #60a5fa;
+  box-shadow: 0 14px 36px rgba(59, 130, 246, .12);
+}
+
+:root[data-theme="light"] .mode-choice-v15.recommended::after {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+@media (max-width: 1180px) {
+  .automation-main-v15.standard-grid-v14.two {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .mode-choice-group-v15 {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-choice-v15 {
+    min-height: auto;
+    padding-right: 46px;
+  }
+
+  .automation-save-v15 {
+    width: 100%;
+  }
+}
