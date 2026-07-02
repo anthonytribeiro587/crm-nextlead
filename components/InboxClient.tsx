@@ -379,7 +379,16 @@ export function InboxClient({
   const router = useRouter();
 
   const selected = contacts.find((contact) => contact.id === selectedId);
-  const selectedDeal = useMemo(() => deals.find((deal) => deal.contactId === selected?.id), [deals, selected?.id]);
+  const selectedDeal = useMemo(() => {
+    if (!selected?.id) return undefined;
+    const related = deals.filter((deal) => deal.contactId === selected.id);
+    return related.sort((a, b) => {
+      const statusRank = (deal: Deal) => deal.status === "aberto" ? 3 : deal.status === "ganho" ? 2 : 1;
+      const rankDiff = statusRank(b) - statusRank(a);
+      if (rankDiff !== 0) return rankDiff;
+      return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
+    })[0];
+  }, [deals, selected?.id]);
   const selectedStage = useMemo(() => stages.find((stage) => stage.id === selectedDeal?.stageId), [stages, selectedDeal?.stageId]);
   const pipelineById = useMemo(() => new Map(pipelines.map((pipeline) => [pipeline.id, pipeline])), [pipelines]);
   const selectedPipelineId = selectedStage?.pipelineId || selectedDeal?.pipelineId || stages[0]?.pipelineId || pipelines[0]?.id || "";
@@ -702,6 +711,7 @@ export function InboxClient({
                 stageId: updatedDeal.stageId || stage.id,
                 status: updatedDeal.status || (isClosed ? "ganho" : "aberto"),
                 lostReason: undefined,
+                updatedAt: updatedDeal.updatedAt || new Date().toISOString(),
               }
             : deal,
         ),
@@ -740,7 +750,7 @@ export function InboxClient({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Erro ao marcar como perdido.");
 
-      setDeals((current) => current.map((deal) => (deal.id === selectedDeal.id ? { ...deal, status: "perdido", lostReason } : deal)));
+      setDeals((current) => current.map((deal) => (deal.id === selectedDeal.id ? { ...deal, status: "perdido", lostReason, updatedAt: new Date().toISOString() } : deal)));
       setActionMessage("Oportunidade marcada como perdida.");
       router.refresh();
     } catch (error) {
@@ -1203,7 +1213,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dealId: selectedDeal.id, stageId: proposalStage.id, status: "aberto", lostReason: null }),
         }).catch(() => null);
-        setDeals((current) => current.map((deal) => (deal.id === selectedDeal.id ? { ...deal, pipelineId: proposalStage.pipelineId || deal.pipelineId, stageId: proposalStage.id, status: "aberto", lostReason: undefined } : deal)));
+        setDeals((current) => current.map((deal) => (deal.id === selectedDeal.id ? { ...deal, pipelineId: proposalStage.pipelineId || deal.pipelineId, stageId: proposalStage.id, status: "aberto", lostReason: undefined, updatedAt: new Date().toISOString() } : deal)));
         await logCommercialHistory("Proposta enviada pelo WhatsApp");
         setLastGeneratedProposal(null);
       }

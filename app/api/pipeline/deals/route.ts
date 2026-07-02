@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
   const { data: deal, error } = await supabase
     .from("deals")
     .insert(insert)
-    .select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at")
+    .select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at,updated_at")
     .single();
 
   if (error) {
@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
       expectedClose: deal.expected_close || undefined,
       lostReason: deal.lost_reason || undefined,
       createdAt: deal.created_at || new Date().toISOString(),
+      updatedAt: deal.updated_at || deal.created_at || new Date().toISOString(),
     },
   });
 }
@@ -159,7 +160,7 @@ export async function PATCH(request: NextRequest) {
     .from("deals")
     .update(update)
     .eq("id", dealId), tenant)
-    .select("id,contact_id,pipeline_id,title,value,status,stage_id,expected_close,lost_reason,created_at")
+    .select("id,contact_id,pipeline_id,title,value,status,stage_id,expected_close,lost_reason,created_at,updated_at")
     .single();
 
   if (error) {
@@ -197,6 +198,7 @@ export async function PATCH(request: NextRequest) {
           expectedClose: deal.expected_close || undefined,
           lostReason: deal.lost_reason || undefined,
           createdAt: deal.created_at || new Date().toISOString(),
+          updatedAt: deal.updated_at || deal.created_at || new Date().toISOString(),
         }
       : undefined,
   });

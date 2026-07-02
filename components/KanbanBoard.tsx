@@ -238,7 +238,7 @@ export function KanbanBoard({
     setDeals((current) =>
       current.map((deal) =>
         deal.id === dealId
-          ? { ...deal, pipelineId: nextStage?.pipelineId || deal.pipelineId, stageId, status: "aberto", lostReason: undefined }
+          ? { ...deal, pipelineId: nextStage?.pipelineId || deal.pipelineId, stageId, status: "aberto", lostReason: undefined, updatedAt: new Date().toISOString() }
           : deal,
       ),
     );
@@ -292,6 +292,7 @@ export function KanbanBoard({
                 stageId: editing.stageId,
                 status: editing.status,
                 lostReason: editing.status === "perdido" ? editing.lostReason || undefined : undefined,
+                updatedAt: new Date().toISOString(),
               }
             : deal,
         ),

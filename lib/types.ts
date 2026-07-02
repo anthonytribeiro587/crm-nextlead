@@ -54,6 +54,7 @@ export interface Deal {
   expectedClose?: string;
   lostReason?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Message {

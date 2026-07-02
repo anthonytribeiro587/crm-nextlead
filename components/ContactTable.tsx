@@ -56,9 +56,18 @@ export function ContactTable({
 
   const dealByContact = useMemo(() => {
     const map = new Map<string, Deal>();
+
+    function dealRank(deal: Deal) {
+      const statusRank = deal.status === "aberto" ? 3 : deal.status === "ganho" ? 2 : 1;
+      const date = new Date(deal.updatedAt || deal.createdAt || 0).getTime() || 0;
+      return statusRank * 10000000000000 + date;
+    }
+
     localDeals.forEach((deal) => {
-      if (!map.has(deal.contactId) || deal.status === "aberto") map.set(deal.contactId, deal);
+      const current = map.get(deal.contactId);
+      if (!current || dealRank(deal) > dealRank(current)) map.set(deal.contactId, deal);
     });
+
     return map;
   }, [localDeals]);
 

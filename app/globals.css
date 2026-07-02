@@ -8688,3 +8688,16 @@ button:disabled {
     min-height: 0 !important;
   }
 }
+
+/* NextLead CRM — v13.4 fine tuning: painel do lead sem abas flutuantes sobre campos */
+.lead-inspector .inspector-tabs {
+  position: static !important;
+  top: auto !important;
+  z-index: auto !important;
+  margin: 10px 0 12px !important;
+  background: rgba(6, 12, 26, .94) !important;
+}
+.lead-inspector .inspector-content-card {
+  position: relative;
+  z-index: 1;
+}

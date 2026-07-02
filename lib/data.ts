@@ -150,7 +150,7 @@ export async function getCrmData(): Promise<CrmData> {
 
   const pipelinesPromise = applyTenantFilter(supabase.from("pipelines").select("id,name,created_at").order("created_at", { ascending: true }), tenant);
   const stagesPromise = applyTenantFilter(supabase.from("pipeline_stages").select("id,pipeline_id,title,position,color").order("position", { ascending: true }), tenant);
-  const dealsPromise = applyTenantFilter(supabase.from("deals").select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at").order("created_at", { ascending: false }).limit(200), tenant);
+  const dealsPromise = applyTenantFilter(supabase.from("deals").select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at,updated_at").order("created_at", { ascending: false }).limit(200), tenant);
   let messagesPromise: any = applyTenantFilter(supabase.from("messages").select("id,contact_id,direction,body,type,status,provider_message_id,raw_payload,created_at").order("created_at", { ascending: true }).limit(500), tenant);
   const activitiesPromise = applyTenantFilter(supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(300), tenant);
   const serviceOrdersPromise = applyTenantFilter(supabase
@@ -189,10 +189,29 @@ export async function getCrmData(): Promise<CrmData> {
     pipelinesResult = await applyTenantFilter(supabase.from("pipelines").select("id,name").order("name", { ascending: true }), tenant);
   }
 
-  if (dealsResult.error?.message?.toLowerCase().includes("pipeline_id")) {
+  if (
+    dealsResult.error?.message?.toLowerCase().includes("pipeline_id") ||
+    dealsResult.error?.message?.toLowerCase().includes("updated_at")
+  ) {
+    const selectWithoutPipeline = dealsResult.error?.message?.toLowerCase().includes("pipeline_id");
+    const selectWithoutUpdatedAt = dealsResult.error?.message?.toLowerCase().includes("updated_at");
+    const dealColumns = [
+      "id",
+      "contact_id",
+      ...(selectWithoutPipeline ? [] : ["pipeline_id"]),
+      "stage_id",
+      "title",
+      "value",
+      "status",
+      "expected_close",
+      "lost_reason",
+      "created_at",
+      ...(selectWithoutUpdatedAt ? [] : ["updated_at"]),
+    ].join(",");
+
     dealsResult = await applyTenantFilter(supabase
       .from("deals")
-      .select("id,contact_id,stage_id,title,value,status,expected_close,lost_reason,created_at")
+      .select(dealColumns)
       .order("created_at", { ascending: false })
       .limit(200), tenant);
   }
@@ -273,6 +292,7 @@ export async function getCrmData(): Promise<CrmData> {
       expectedClose: deal.expected_close || undefined,
       lostReason: deal.lost_reason || undefined,
       createdAt: deal.created_at || new Date().toISOString(),
+      updatedAt: deal.updated_at || deal.created_at || new Date().toISOString(),
     };
   });
 
