@@ -145,6 +145,16 @@ function normalizeMessages(payload: any): any[] {
 }
 
 
+function parseFromMe(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "sim";
+  }
+  return false;
+}
+
 function isInboundMessageEvent(event: string) {
   const compact = String(event || "")
     .toLowerCase()
@@ -575,7 +585,7 @@ export async function persistEvolutionWebhook(payload: any) {
       continue;
     }
 
-    const fromMe = Boolean(key?.fromMe || item?.fromMe);
+    const fromMe = parseFromMe(key?.fromMe) || parseFromMe(item?.fromMe) || parseFromMe(item?.data?.key?.fromMe) || parseFromMe(item?.data?.fromMe);
 
     // Mensagens enviadas pelo próprio CRM já são salvas em /api/whatsapp/send.
     // Ignorar ecos fromMe evita criar contatos duplicados como "Você" para o mesmo número.
@@ -644,18 +654,20 @@ export async function persistEvolutionWebhook(payload: any) {
     );
     if (messageResult.error) {
       errors.push(`message:${phone}:${messageResult.error.message}`);
-      continue;
+      // Não interromper o SDR: alguns eventos repetidos da Evolution podem bater em conflito
+      // de provider_message_id, mas ainda assim queremos registrar/diagnosticar a automação.
+    } else {
+      saved += 1;
     }
-
-    saved += 1;
 
     if (!fromMe) {
       try {
         await ensureDefaultAutomations(supabase, tenant);
-        console.info("NextLead SDR webhook start", JSON.stringify({ phone, contactId: contact.id, tenantId: tenant.id }).slice(0, 800));
+        const debugStart = { phone, contactId: contact.id, tenantId: tenant.id, body: String(body || "").slice(0, 80), providerMessageId, messageSaved: !messageResult.error };
+        console.info("NextLead SDR webhook start", JSON.stringify(debugStart).slice(0, 1000));
         const automationResult = await runSdrAutomationForContact({ contactId: contact.id, tenant, source: "webhook" });
         automationResults.push({ phone, contactId: contact.id, ...automationResult });
-        console.info("NextLead SDR webhook result", JSON.stringify({ phone, contactId: contact.id, ...automationResult }).slice(0, 1800));
+        console.info("NextLead SDR webhook result", JSON.stringify({ phone, contactId: contact.id, ...automationResult }).slice(0, 2200));
         if (!automationResult?.ok) {
           errors.push(`automation:${phone}:${automationResult?.error || automationResult?.reason || "sem detalhes"}`);
         }

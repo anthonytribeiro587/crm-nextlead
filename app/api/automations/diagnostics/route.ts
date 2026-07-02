@@ -30,12 +30,34 @@ export async function GET() {
       supabase.from("webhook_events").select("id,provider,payload,created_at").order("created_at", { ascending: false }).limit(5),
       tenant,
     );
+    const parseFromMe = (value: unknown) => {
+      if (typeof value === "boolean") return value;
+      if (typeof value === "number") return value === 1;
+      if (typeof value === "string") return ["true", "1", "yes", "sim"].includes(value.trim().toLowerCase());
+      return false;
+    };
+    const normalizeJid = (value: unknown) => String(value || "").replace(/@.+$/, "").replace(/\D/g, "");
+    const previewPayload = (payload: any) => {
+      const data = Array.isArray(payload?.data) ? payload.data[0] : payload?.data || payload;
+      const key = data?.key || data?.data?.key || {};
+      const msg = data?.message || data?.data?.message || {};
+      const body = msg?.conversation || msg?.extendedTextMessage?.text || msg?.imageMessage?.caption || msg?.videoMessage?.caption || (msg?.audioMessage ? "[áudio]" : "");
+      const phone = normalizeJid(key?.remoteJid || data?.remoteJid || data?.sender || data?.from || data?.number);
+      return {
+        phone: phone ? `${phone.slice(0, 4)}...${phone.slice(-4)}` : null,
+        fromMe: parseFromMe(key?.fromMe) || parseFromMe(data?.fromMe),
+        hasText: Boolean(body),
+        textPreview: body ? String(body).slice(0, 80) : null,
+        messageType: data?.messageType || data?.type || Object.keys(msg || {})[0] || null,
+      };
+    };
     recentWebhooks = (result.data || []).map((event: any) => ({
       id: event.id,
       provider: event.provider,
       event: event.payload?.event || null,
       instance: event.payload?.instance || null,
       createdAt: event.created_at,
+      preview: previewPayload(event.payload),
     }));
   }
 
