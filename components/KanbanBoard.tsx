@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Contact, Deal, DealStatus, LeadTemperature, Pipeline, Stage } from "@/lib/types";
 import { money } from "@/lib/format";
 import { PIPELINE_TEMPLATES, type PipelineTemplateKey } from "@/lib/pipeline-templates";
+import { SmartSelect } from "@/components/SmartSelect";
 
 type EditingState = {
   deal: Deal;
@@ -460,9 +461,13 @@ export function KanbanBoard({
         <div className="pipeline-control-main">
           <p className="eyebrow-small">Pipeline ativo</p>
           <div className="pipeline-select-line">
-            <select className="select pipeline-select" value={activePipeline?.id || ""} onChange={(event) => selectActivePipeline(event.target.value)}>
-              {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
-            </select>
+            <SmartSelect
+              className="pipeline-smart-select"
+              value={activePipeline?.id || ""}
+              onChange={selectActivePipeline}
+              ariaLabel="Selecionar pipeline ativo"
+              options={pipelines.map((pipeline) => ({ value: pipeline.id, label: pipeline.name }))}
+            />
             <button type="button" className="btn secondary" onClick={() => setNewPipeline({ name: "Pipeline de Protótipos", template: "prototipos", stages: templateStages("prototipos") })}>+ Pipeline</button>
             <button type="button" className="btn" onClick={openNewDeal} disabled={!contacts.length || !firstStageId}>+ Oportunidade</button>
           </div>
@@ -479,19 +484,32 @@ export function KanbanBoard({
 
       <div className="pipeline-toolbar card pipeline-toolbar-v2 pipeline-toolbar-lean">
         <input className="input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar lead, empresa, telefone..." />
-        <select className="select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
-          <option value="todos">Todos responsáveis</option>
-          {owners.map((owner) => <option key={owner} value={owner}>{owner}</option>)}
-        </select>
-        <select className="select" value={temperatureFilter} onChange={(event) => setTemperatureFilter(event.target.value as "todos" | LeadTemperature)}>
-          {temperatureOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        <select className="select" value={ageFilter} onChange={(event) => setAgeFilter(event.target.value)}>
-          <option value="todos">Todos prazos</option>
-          <option value="7d">Parados +7 dias</option>
-          <option value="14d">Parados +14 dias</option>
-          <option value="sem-previsao">Sem previsão</option>
-        </select>
+        <SmartSelect
+          className="filter-smart-select"
+          value={ownerFilter}
+          onChange={setOwnerFilter}
+          ariaLabel="Filtrar por responsável"
+          options={[{ value: "todos", label: "Todos responsáveis" }, ...owners.map((owner) => ({ value: owner, label: owner }))]}
+        />
+        <SmartSelect
+          className="filter-smart-select"
+          value={temperatureFilter}
+          onChange={(value) => setTemperatureFilter(value as "todos" | LeadTemperature)}
+          ariaLabel="Filtrar por temperatura"
+          options={temperatureOptions.map((option) => ({ value: option.value, label: option.label }))}
+        />
+        <SmartSelect
+          className="filter-smart-select"
+          value={ageFilter}
+          onChange={setAgeFilter}
+          ariaLabel="Filtrar por prazo"
+          options={[
+            { value: "todos", label: "Todos prazos" },
+            { value: "7d", label: "Parados +7 dias" },
+            { value: "14d", label: "Parados +14 dias" },
+            { value: "sem-previsao", label: "Sem previsão" },
+          ]}
+        />
         <div className="pipeline-view-toggle-v2" aria-label="Modo de visualização">
           <button type="button" className={viewMode === "board" ? "active" : ""} onClick={() => setViewMode("board")}>Kanban</button>
           <button type="button" className={viewMode === "list" ? "active" : ""} onClick={() => setViewMode("list")}>Lista</button>

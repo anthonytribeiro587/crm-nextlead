@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Activity, Contact, Deal, LeadTemperature, Message, Pipeline, ServiceOrder, ServiceOrderStatus, Stage } from "@/lib/types";
 import { money, shortDate } from "@/lib/format";
+import { SmartSelect } from "@/components/SmartSelect";
 
 function formatDateTimeLocal(date: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -1418,22 +1419,22 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
             </div>
           </div>
           <div className="chat-head-actions-pro whatsapp-chat-actions conversation-command-center">
-            <label className="header-stage-field header-stage-whatsapp conversation-stage-card">
+            <div className="header-stage-field header-stage-whatsapp conversation-stage-card">
               <span>Funil atual</span>
               <small>{selectedPipeline?.name || "Sem funil definido"}</small>
-              <select
+              <SmartSelect
+                className="header-smart-select"
                 value={selectedDealStatus}
-                onChange={(event) => handleStageChange(event.target.value)}
+                onChange={handleStageChange}
                 disabled={!selectedDeal || Boolean(moving)}
-                aria-label="Alterar etapa do lead"
-              >
-                <option value="" disabled>{selectedDeal ? "Selecione uma etapa" : "Sem oportunidade"}</option>
-                {selectedPipelineStages.map((stage) => (
-                  <option key={stage.id} value={stage.id}>{stage.title}</option>
-                ))}
-                <option value="perdido">Perdido</option>
-              </select>
-            </label>
+                ariaLabel="Alterar etapa do lead"
+                placeholder={selectedDeal ? "Selecione uma etapa" : "Sem oportunidade"}
+                options={[
+                  ...selectedPipelineStages.map((stage) => ({ value: stage.id, label: stage.title })),
+                  { value: "perdido", label: "Perdido" },
+                ]}
+              />
+            </div>
             <button
               className="lead-panel-trigger"
               type="button"
@@ -1601,47 +1602,47 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
           <div className="inspector-fields">
             <label className="action-field">
               <span>Temperatura</span>
-              <select
-                className="mini-select"
+              <SmartSelect
+                className="mini-smart-select"
                 value={selected?.temperature || "morno"}
-                onChange={(event) => updateTemperature(event.target.value as LeadTemperature)}
+                onChange={(value) => updateTemperature(value as LeadTemperature)}
                 disabled={updatingLead || !selected}
-              >
-                <option value="frio">Frio</option>
-                <option value="morno">Morno</option>
-                <option value="quente">Quente</option>
-              </select>
+                ariaLabel="Alterar temperatura do lead"
+                options={[
+                  { value: "frio", label: "Frio" },
+                  { value: "morno", label: "Morno" },
+                  { value: "quente", label: "Quente" },
+                ]}
+              />
             </label>
 
             <label className="action-field">
               <span>Funil</span>
-              <select
-                className="mini-select"
+              <SmartSelect
+                className="mini-smart-select"
                 value={selectedPipelineId}
-                onChange={(event) => handlePipelineChange(event.target.value)}
+                onChange={handlePipelineChange}
                 disabled={!selectedDeal || Boolean(moving)}
-              >
-                <option value="" disabled>Sem funil</option>
-                {pipelines.map((pipeline) => (
-                  <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>
-                ))}
-              </select>
+                placeholder="Sem funil"
+                ariaLabel="Mover oportunidade para outro funil"
+                options={pipelines.map((pipeline) => ({ value: pipeline.id, label: pipeline.name }))}
+              />
             </label>
 
             <label className="action-field">
               <span>Etapa</span>
-              <select
-                className={`mini-select ${selectedDeal?.status === "perdido" ? "danger-select" : ""}`}
+              <SmartSelect
+                className={`mini-smart-select ${selectedDeal?.status === "perdido" ? "danger-select" : ""}`}
                 value={selectedDealStatus}
-                onChange={(event) => handleStageChange(event.target.value)}
+                onChange={handleStageChange}
                 disabled={!selectedDeal || Boolean(moving)}
-              >
-                <option value="" disabled>{selectedDeal ? "Selecione uma etapa" : "Sem oportunidade"}</option>
-                {selectedPipelineStages.map((stage) => (
-                  <option key={stage.id} value={stage.id}>{stage.title}</option>
-                ))}
-                <option value="perdido">Perdido</option>
-              </select>
+                placeholder={selectedDeal ? "Selecione uma etapa" : "Sem oportunidade"}
+                ariaLabel="Alterar etapa da oportunidade"
+                options={[
+                  ...selectedPipelineStages.map((stage) => ({ value: stage.id, label: stage.title })),
+                  { value: "perdido", label: "Perdido" },
+                ]}
+              />
             </label>
           </div>
 
