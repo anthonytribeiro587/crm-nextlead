@@ -234,6 +234,78 @@ function withoutTenant<T extends Record<string, any>>(record: T) {
   return copy as T;
 }
 
+function hasMeaningfulValue(value: unknown) {
+  return String(value ?? "").trim().length > 0;
+}
+
+function normalizeForCompare(value: unknown) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function buildLandingChanges(existingContact: any, next: {
+  name: string;
+  company: string;
+  source: string;
+  temperature: string;
+  notes: string;
+  email: string;
+  owner: string;
+}) {
+  if (!existingContact?.id) return [];
+
+  const fields: Array<[string, string, unknown, unknown, boolean]> = [
+    ["Nome", "name", existingContact.name, next.name, true],
+    ["Empresa/origem", "company", existingContact.company, next.company, hasMeaningfulValue(next.company)],
+    ["Origem", "source", existingContact.source, next.source, hasMeaningfulValue(next.source)],
+    ["Temperatura", "temperature", existingContact.temperature, next.temperature, hasMeaningfulValue(next.temperature)],
+    ["E-mail", "email", existingContact.email, next.email, hasMeaningfulValue(next.email)],
+    ["Responsável", "owner", existingContact.owner, next.owner, hasMeaningfulValue(next.owner)],
+    ["Observação", "notes", existingContact.notes, next.notes, hasMeaningfulValue(next.notes)],
+  ];
+
+  return fields
+    .filter(([, , before, after, shouldCompare]) => shouldCompare && normalizeForCompare(before) !== normalizeForCompare(after))
+    .map(([label, , before, after]) => {
+      const previous = normalizeForCompare(before) || "vazio";
+      const current = normalizeForCompare(after) || "vazio";
+      if (label === "Observação") return `Nova observação recebida pela landing: ${current.slice(0, 140)}`;
+      return `${label} alterado de "${previous.slice(0, 70)}" para "${current.slice(0, 70)}"`;
+    });
+}
+
+function minutesSince(dateValue: unknown) {
+  const time = new Date(String(dateValue || "")).getTime();
+  if (!Number.isFinite(time)) return Number.POSITIVE_INFINITY;
+  return (Date.now() - time) / 60000;
+}
+
+async function insertContactHistory(input: {
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>;
+  contactId: string;
+  title: string;
+  tenant: TenantContext;
+}) {
+  const { supabase, contactId, title, tenant } = input;
+  const record = withTenant(
+    {
+      contact_id: contactId,
+      title,
+      due_at: new Date().toISOString(),
+      done: true,
+      updated_at: new Date().toISOString(),
+    },
+    tenant,
+  );
+
+  let result = await supabase.from("activities").insert(record).select("id").single();
+
+  if (maybeMissingColumn(result.error, "tenant_id")) {
+    result = await supabase.from("activities").insert(withoutTenant(record)).select("id").single();
+  }
+
+  return result.data?.id;
+}
+
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
@@ -347,7 +419,7 @@ export async function POST(request: NextRequest) {
   let possibleContactsResult = await applyTenantFilter(
     supabase
       .from("contacts")
-      .select("id,phone")
+      .select("id,phone,name,email,company,source,owner,temperature,notes,last_message_at")
       .in("phone", variants.length ? variants : [phone])
       .limit(10),
     tenant,
@@ -359,7 +431,7 @@ export async function POST(request: NextRequest) {
   if (maybeMissingColumn(possibleContactsResult.error, "tenant_id")) {
     possibleContactsResult = await supabase
       .from("contacts")
-      .select("id,phone")
+      .select("id,phone,name,email,company,source,owner,temperature,notes,last_message_at")
       .in("phone", variants.length ? variants : [phone])
       .limit(10);
   }
@@ -368,6 +440,35 @@ export async function POST(request: NextRequest) {
   const existingContact =
     possibleContacts?.find((item: any) => item.phone === phone) ||
     possibleContacts?.[0];
+
+  const landingChanges = buildLandingChanges(existingContact, {
+    name,
+    company,
+    source,
+    temperature,
+    notes,
+    email,
+    owner,
+  });
+  const isVeryRecentDuplicate = Boolean(existingContact?.id && minutesSince(existingContact.last_message_at) <= 5);
+
+  if (existingContact?.id && isVeryRecentDuplicate && landingChanges.length === 0) {
+    await insertContactHistory({
+      supabase,
+      contactId: existingContact.id,
+      tenant,
+      title: "Tentativa repetida pela landing em menos de 5 minutos. O contato não foi duplicado.",
+    });
+
+    return json(request, {
+      ok: true,
+      duplicate: true,
+      contactId: existingContact.id,
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      message: "Já recebemos seus dados. Vamos te chamar no WhatsApp.",
+    });
+  }
 
   let contactResult: any;
 
@@ -493,6 +594,19 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 },
     );
+  }
+
+  if (existingContact?.id) {
+    const historyTitle = landingChanges.length
+      ? `Lead atualizado pela landing. ${landingChanges.slice(0, 4).join("; ")}${landingChanges.length > 4 ? "; ..." : ""}`
+      : "Nova entrada pela landing registrada para contato existente.";
+
+    await insertContactHistory({
+      supabase,
+      contactId: contact.id,
+      tenant,
+      title: historyTitle,
+    });
   }
 
   let existingDealResult = await applyTenantFilter(
