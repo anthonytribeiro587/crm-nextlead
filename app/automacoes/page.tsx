@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import { Bot, CheckCircle2, Clock, KeyRound, MessageCircle, PlayCircle, ShieldCheck, Sparkles, Workflow } from "lucide-react";
-import { getAutomationsData } from "@/lib/automations";
+import { defaultSdrAgentInstructions, getAutomationsData } from "@/lib/automations";
 import { shortDate } from "@/lib/format";
 
 function modeLabel(mode: string, autoSendEnabled = true) {
@@ -29,6 +29,9 @@ export default async function AutomacoesPage() {
   const geminiConfigured = Boolean(process.env.GEMINI_API_KEY?.trim());
   const autoSendEnabled = process.env.NEXTLEAD_ENABLE_AUTO_SDR === "true";
   const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const sdrInstructions = String((sdr?.actions as any)?.agentInstructions || defaultSdrAgentInstructions);
+  const lastRun = runs[0];
+  const automaticReady = Boolean(geminiConfigured && autoSendEnabled && sdrMode === "auto" && sdr?.enabled !== false && tableReady);
 
   return (
     <>
@@ -104,20 +107,26 @@ export default async function AutomacoesPage() {
               <span>Automação ativa</span>
             </label>
 
-            <div className={`automation-auto-status-v16 ${autoSendEnabled ? "ready" : "locked"}`}>
+            <div className={`automation-auto-status-v16 ${automaticReady ? "ready" : "locked"}`}>
               <ShieldCheck size={18} />
               <div>
-                <strong>{autoSendEnabled ? "Automático liberado" : "Automático ainda bloqueado"}</strong>
-                <span>{autoSendEnabled ? "Quando o modo estiver em Responder automático, o webhook do WhatsApp pode responder o lead sozinho." : "Para responder sozinho, adicione NEXTLEAD_ENABLE_AUTO_SDR=true na Vercel e faça redeploy. Sem isso, ele só gera sugestão."}</span>
+                <strong>{automaticReady ? "Automático pronto para responder" : "Automático ainda precisa de ajuste"}</strong>
+                <span>{automaticReady ? "Quando chegar mensagem recebida pelo webhook, o SDR deve responder pelo WhatsApp e registrar a execução." : "Para responder sozinho precisa: modo Responder automático, automação ativa, migration v7, GEMINI_API_KEY, NEXTLEAD_ENABLE_AUTO_SDR=true e redeploy."}</span>
               </div>
             </div>
+
+            <label className="field-block-v147">
+              <span>Comportamento do agente</span>
+              <textarea name="agentInstructions" rows={10} defaultValue={sdrInstructions} />
+              <small>Esse é o prompt mestre do SDR. Ajuste aqui como ele deve falar, o que pode perguntar e o que não deve prometer.</small>
+            </label>
 
             <div className="automation-safe-note">
               <ShieldCheck size={18} />
               <span>O SDR não promete preço, prazo fechado nem garantia de clientes. Ele faz perguntas, qualifica e entrega o lead quente para atendimento humano.</span>
             </div>
 
-            <button className="btn automation-save-v15" type="submit">Salvar configuração do SDR</button>
+            <button className="btn automation-save-v15" type="submit">Salvar SDR e comportamento</button>
           </form>
 
           <div className="automation-flow-preview automation-flow-v15">
@@ -141,14 +150,37 @@ export default async function AutomacoesPage() {
             <div className="gemini-steps-v15">
               <div><KeyRound size={16} /><span>1. Gere uma API key no Google AI Studio.</span></div>
               <div><Sparkles size={16} /><span>2. Adicione na Vercel como <code>GEMINI_API_KEY</code>.</span></div>
-              <div><CheckCircle2 size={16} /><span>3. Adicione <code>GEMINI_MODEL={geminiModel}</code>.</span></div>
+              <div><CheckCircle2 size={16} /><span>3. Adicione <code>GEMINI_MODEL={geminiModel}</code> e faça redeploy.</span></div>
               <div><ShieldCheck size={16} /><span>4. Para responder sozinho, adicione <code>NEXTLEAD_ENABLE_AUTO_SDR=true</code> e faça redeploy.</span></div>
             </div>
             <div className="gemini-env-v15">
-              <span>Envio automático</span>
-              <strong>{autoSendEnabled ? "Liberado" : "Aguardando NEXTLEAD_ENABLE_AUTO_SDR=true"}</strong>
-              <small>{autoSendEnabled ? "O webhook agora dispara o SDR quando chegar mensagem recebida." : "A chave Gemini sozinha não ativa envio automático."}</small>
+              <span>Status do automático</span>
+              <strong>{automaticReady ? "Pronto" : "Não pronto"}</strong>
+              <small>{automaticReady ? "Agora teste enviando mensagem de outro número." : "Abra o diagnóstico para ver exatamente o que falta."}</small>
             </div>
+            <div className="diagnostic-actions-v147">
+              <a className="btn secondary" href="/api/ai/gemini-test" target="_blank">Testar Gemini isolado</a>
+              <a className="btn secondary" href="/api/automations/diagnostics" target="_blank">Diagnóstico do SDR</a>
+            </div>
+            <div className="gemini-checklist-v147">
+              <div><span className={geminiConfigured ? "ok" : "bad"}>{geminiConfigured ? "✓" : "!"}</span> GEMINI_API_KEY {geminiConfigured ? "configurada" : "faltando"}</div>
+              <div><span className={autoSendEnabled ? "ok" : "bad"}>{autoSendEnabled ? "✓" : "!"}</span> NEXTLEAD_ENABLE_AUTO_SDR {autoSendEnabled ? "true" : "não está true"}</div>
+              <div><span className={tableReady ? "ok" : "bad"}>{tableReady ? "✓" : "!"}</span> Tabelas de automação {tableReady ? "ativas" : "faltando migration"}</div>
+              <div><span className={sdrMode === "auto" ? "ok" : "bad"}>{sdrMode === "auto" ? "✓" : "!"}</span> Modo atual: {modeLabel(sdrMode, autoSendEnabled)}</div>
+            </div>
+          </article>
+
+          <article className="card standard-card-v14 sdr-last-run-v147">
+            <div className="dash-section-head compact"><div><p className="eyebrow-small">Último disparo</p><h2>O que aconteceu?</h2><p className="muted">Use isto quando o lead mandar mensagem e o agente não responder.</p></div></div>
+            {lastRun ? (
+              <div className="last-run-box-v147">
+                <strong>{lastRun.status}</strong>
+                <p>{lastRun.summary || lastRun.error || "Execução registrada."}</p>
+                <small>{shortDate(lastRun.createdAt)}</small>
+              </div>
+            ) : (
+              <div className="last-run-box-v147"><strong>Nenhuma execução ainda</strong><p>Depois que o webhook disparar o SDR, o motivo aparece aqui.</p></div>
+            )}
           </article>
 
           <article className="card standard-card-v14">

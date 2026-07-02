@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { applyTenantFilter, getTenantContext, withTenant } from "@/lib/tenant";
-import { defaultSdrAutomation, ensureDefaultAutomations, getAutomationsData } from "@/lib/automations";
+import { defaultSdrAgentInstructions, defaultSdrAutomation, ensureDefaultAutomations, getAutomationsData } from "@/lib/automations";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
     payload.type = form.get("type");
     payload.mode = form.get("mode");
     payload.enabled = boolFromForm(form.get("enabled"));
+    payload.agentInstructions = form.get("agentInstructions");
   } else {
     Object.assign(payload, await request.json().catch(() => ({})));
   }
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
   const tenant = await getTenantContext(request.headers.get("host"));
   const mode = cleanMode(payload.mode);
   const enabled = payload.enabled !== false && payload.enabled !== "false";
+  const agentInstructions = String(payload.agentInstructions || "").trim() || defaultSdrAgentInstructions;
   let automationId = String(payload.automationId || "").trim();
 
   try {
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
     const update = {
       enabled,
       mode,
+      actions: { ...defaultSdrAutomation.actions, agentInstructions },
       updated_at: new Date().toISOString(),
     };
 
@@ -72,7 +75,7 @@ export async function POST(request: NextRequest) {
         mode,
         trigger_type: defaultSdrAutomation.triggerType,
         conditions: defaultSdrAutomation.conditions,
-        actions: defaultSdrAutomation.actions,
+        actions: { ...defaultSdrAutomation.actions, agentInstructions },
       }, tenant);
       result = await supabase.from("automations").insert(record).select("id,name,mode,enabled").single();
     }

@@ -50,6 +50,22 @@ export type SdrAnalysis = {
   };
 };
 
+export const defaultSdrAgentInstructions = `Você é um SDR humano da Next Lead, uma empresa que cria landing pages e soluções simples de captação de leads.
+
+Regras de comportamento:
+- Nunca diga que é IA, robô, modelo ou automação.
+- Apresente-se como atendimento da Next Lead.
+- Seja curto, natural e comercial, como conversa de WhatsApp.
+- Não prometa preço fechado, prazo fechado, garantia de clientes ou resultado garantido.
+- Não invente informações que o lead não passou.
+- Faça uma pergunta por vez.
+- Seu objetivo é qualificar, não fechar a venda sozinho.
+- Descubra: tipo de negócio, se já tem site/landing page, se quer receber mais orçamentos pelo WhatsApp e urgência.
+- Quando o lead demonstrar interesse real, diga que vai encaminhar para alguém da equipe orientar.
+- Se o lead pedir preço, diga que depende do nível de personalização e pergunte sobre o negócio antes de passar para avaliação.
+- Use português brasileiro.
+- Não use markdown pesado; no máximo quebras de linha curtas.`;
+
 export const defaultSdrAutomation: Automation = {
   id: "sdr-nextlead-default",
   name: "SDR NextLead",
@@ -70,6 +86,7 @@ export const defaultSdrAutomation: Automation = {
     suggestStage: true,
     logHistory: true,
     autoSendRequiresEnv: true,
+    agentInstructions: defaultSdrAgentInstructions,
   },
 };
 
@@ -341,7 +358,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
   const automationId = await ensureDefaultAutomations(supabase, tenant);
   const automationResult = automationId
     ? await applyTenantFilter(
-        supabase.from("automations").select("id,enabled,mode,type").eq("id", automationId).limit(1),
+        supabase.from("automations").select("id,enabled,mode,type,actions,conditions").eq("id", automationId).limit(1),
         tenant,
       ).maybeSingle()
     : ({ data: null, error: null } as any);
@@ -444,9 +461,23 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
   );
   const messages = (messagesResult.data || []).map(mapMessageRow).reverse();
 
+  const agentInstructions = String(automation?.actions?.agentInstructions || process.env.NEXTLEAD_SDR_PROMPT || defaultSdrAgentInstructions).trim();
   const analysis = process.env.GEMINI_API_KEY
-    ? await analyzeSdrWithGemini({ contact, deal, stage, pipeline, messages })
+    ? await analyzeSdrWithGemini({ contact, deal, stage, pipeline, messages, agentInstructions })
     : analyzeSdrLocally({ contact, deal, stage, pipeline, messages });
+
+  if (mode === "auto" && !isAutoSdrGloballyEnabled()) {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      contact_id: contact.id,
+      deal_id: deal?.id || null,
+      status: "skipped",
+      summary: "SDR em automático, mas NEXTLEAD_ENABLE_AUTO_SDR não está true no deploy.",
+      input: { contactId: contact.id, mode, source: input.source || "manual" },
+      output: { ...analysis, autoSendEnabled: false },
+    });
+    return { ok: true, skipped: true, mode, sent: false, reason: "NEXTLEAD_ENABLE_AUTO_SDR não está true no deploy.", analysis };
+  }
 
   await applyTenantFilter(supabase.from("contacts").update({ temperature: analysis.temperature, updated_at: new Date().toISOString() }).eq("id", contact.id), tenant);
 
@@ -583,6 +614,7 @@ export async function analyzeSdrWithGemini(input: {
   stage?: Stage;
   pipeline?: Pipeline;
   messages: Message[];
+  agentInstructions?: string;
 }) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return analyzeSdrLocally(input);
@@ -594,7 +626,29 @@ export async function analyzeSdrWithGemini(input: {
     .map((message) => `${message.direction === "inbound" ? "Lead" : "Atendente"}: ${message.body}`)
     .join("\n");
 
-  const prompt = `Você é o Agente SDR da Next Lead. Qualifique leads para landing page, CRM e automações de WhatsApp.\n\nRegras:\n- Não prometa preço, prazo fechado ou garantia de clientes.\n- Faça uma pergunta por vez.\n- Descubra tipo de negócio, se já tem site/landing e se quer mais clientes pelo WhatsApp.\n- Se estiver quente, entregue para atendimento humano.\n- Responda em português brasileiro, curto e natural.\n\nContexto:\nContato: ${input.contact?.name || "sem nome"}\nEmpresa: ${input.contact?.company || "não informada"}\nFunil/etapa: ${input.pipeline?.name || "sem funil"} / ${input.stage?.title || "sem etapa"}\nTranscrição:\n${transcript || "sem mensagens"}\n\nResponda apenas JSON válido com: summary, suggestedReply, nextQuestion, temperature (frio|morno|quente), suggestedStageHint, shouldHandoff, handoffReason, extracted { businessType, hasWebsite, wantsWhatsAppLeads, urgency }.\nSugestão local de apoio: ${JSON.stringify(local)}`;
+  const prompt = `${input.agentInstructions || defaultSdrAgentInstructions}
+
+Tarefa: analise o lead e retorne SOMENTE JSON válido com as chaves: summary, suggestedReply, nextQuestion, temperature, suggestedStageHint, shouldHandoff, handoffReason, extracted.
+
+Contexto:
+Contato: ${input.contact?.name || "Lead"} - ${input.contact?.company || input.contact?.source || "sem empresa"}
+Funil: ${input.pipeline?.name || "não definido"} / ${input.stage?.title || "sem etapa"}
+Oportunidade: ${input.deal?.title || "sem oportunidade"}
+
+Conversa:
+${transcript || "Sem mensagens recentes."}
+
+Formato obrigatório:
+{
+  "summary": "resumo curto",
+  "suggestedReply": "resposta curta pronta para WhatsApp",
+  "nextQuestion": "próxima pergunta objetiva",
+  "temperature": "frio|morno|quente",
+  "suggestedStageHint": "etapa sugerida",
+  "shouldHandoff": false,
+  "handoffReason": "motivo",
+  "extracted": { "businessType": "", "hasWebsite": "sim|nao|nao_informado", "wantsWhatsAppLeads": "sim|nao|nao_informado", "urgency": "baixa|media|alta" }
+}`;
 
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
@@ -612,5 +666,39 @@ export async function analyzeSdrWithGemini(input: {
     return { ...local, ...parsed, extracted: { ...local.extracted, ...(parsed.extracted || {}) } } as SdrAnalysis;
   } catch {
     return local;
+  }
+}
+
+
+export async function testGeminiConnection(samplePrompt = "Responda apenas: Gemini conectado.") {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  if (!apiKey) {
+    return { ok: false, configured: false, model, error: "GEMINI_API_KEY não configurada no deploy." };
+  }
+
+  try {
+    const startedAt = Date.now();
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: samplePrompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 120 },
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    const text = payload?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join(" ").trim();
+    return {
+      ok: response.ok && Boolean(text),
+      configured: true,
+      model,
+      status: response.status,
+      latencyMs: Date.now() - startedAt,
+      text: text || null,
+      error: response.ok ? null : payload?.error?.message || "Gemini não retornou resposta válida.",
+    };
+  } catch (error: any) {
+    return { ok: false, configured: true, model, error: error?.message || "Falha ao chamar Gemini." };
   }
 }
