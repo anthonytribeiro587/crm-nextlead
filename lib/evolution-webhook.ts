@@ -1,6 +1,8 @@
 import { getSupabaseAdmin } from "./supabase-admin";
 import { brazilPhoneVariants } from "./format";
 import { ensureDefaultPipeline } from "./default-pipeline";
+import { getTenantContext, withTenant } from "./tenant";
+import { ensureDefaultAutomations, runSdrAutomationForContact } from "./automations";
 
 function onlyDigits(value: unknown) {
   return String(value || "").replace(/\D/g, "");
@@ -370,6 +372,7 @@ async function ensureDealForContact(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   contactId: string,
   title: string,
+  tenant?: Awaited<ReturnType<typeof getTenantContext>>,
 ) {
   const { data: existingDeal } = await supabase
     .from("deals")
@@ -391,7 +394,7 @@ async function ensureDealForContact(
     .eq("id", firstStageId)
     .maybeSingle();
 
-  await supabase.from("deals").insert({
+  await supabase.from("deals").insert(withTenant({
     contact_id: contactId,
     pipeline_id: firstStage?.pipeline_id || null,
     stage_id: firstStageId,
@@ -399,12 +402,13 @@ async function ensureDealForContact(
     status: "aberto",
     value: 0,
     source: "WhatsApp",
-  });
+  }, tenant || await getTenantContext()));
 }
 
 async function upsertContactSafe(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   input: { phone: string; name: string; createdAt: string },
+  tenant?: Awaited<ReturnType<typeof getTenantContext>>,
 ) {
   const variants = brazilPhoneVariants(input.phone);
   const { data: possibleContacts } = await supabase
@@ -451,7 +455,7 @@ async function upsertContactSafe(
     } as any;
   }
 
-  const fullPayload = {
+  const fullPayload = withTenant({
     phone: input.phone,
     name: input.name || input.phone,
     source: "WhatsApp",
@@ -459,7 +463,7 @@ async function upsertContactSafe(
     temperature: "morno",
     last_message_at: input.createdAt,
     updated_at: new Date().toISOString(),
-  };
+  }, tenant || await getTenantContext());
 
   let result = await supabase
     .from("contacts")
@@ -515,9 +519,11 @@ export async function persistEvolutionWebhook(payload: any) {
   if (!supabase)
     return { persisted: false, reason: "Supabase não configurado." };
 
+  const tenant = await getTenantContext();
+
   await supabase
     .from("webhook_events")
-    .insert({ provider: "evolution", payload });
+    .insert(withTenant({ provider: "evolution", payload }, tenant));
 
   const event = String(payload?.event || "").toLowerCase();
   const candidates = normalizeMessages(payload);
@@ -597,7 +603,7 @@ export async function persistEvolutionWebhook(payload: any) {
       phone,
       name: pushName || phone,
       createdAt: createdAt.toISOString(),
-    });
+    }, tenant);
 
     if (contactResult.error || !contactResult.data?.id) {
       errors.push(
@@ -613,10 +619,11 @@ export async function persistEvolutionWebhook(payload: any) {
         supabase,
         contact.id,
         `Atendimento WhatsApp - ${pushName || phone}`,
+        tenant,
       );
     }
 
-    const record = {
+    const record = withTenant({
       contact_id: contact.id,
       direction: fromMe ? "outbound" : "inbound",
       body,
@@ -627,7 +634,7 @@ export async function persistEvolutionWebhook(payload: any) {
       raw_payload: item,
       created_at: createdAt.toISOString(),
       updated_at: new Date().toISOString(),
-    };
+    }, tenant);
 
     const messageResult = await saveMessageSafe(
       supabase,
@@ -640,6 +647,15 @@ export async function persistEvolutionWebhook(payload: any) {
     }
 
     saved += 1;
+
+    if (!fromMe) {
+      try {
+        await ensureDefaultAutomations(supabase, tenant);
+        await runSdrAutomationForContact({ contactId: contact.id, tenant, source: "webhook" });
+      } catch (automationError) {
+        errors.push(`automation:${phone}:${automationError instanceof Error ? automationError.message : "erro"}`);
+      }
+    }
   }
 
   return {

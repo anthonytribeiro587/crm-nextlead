@@ -5,8 +5,8 @@ import { Bot, CheckCircle2, Clock, KeyRound, MessageCircle, PlayCircle, ShieldCh
 import { getAutomationsData } from "@/lib/automations";
 import { shortDate } from "@/lib/format";
 
-function modeLabel(mode: string) {
-  if (mode === "auto") return "Automático";
+function modeLabel(mode: string, autoSendEnabled = true) {
+  if (mode === "auto") return autoSendEnabled ? "Automático" : "Auto aguardando liberação";
   if (mode === "suggest") return "Sugestão";
   return "Desligado";
 }
@@ -56,7 +56,7 @@ export default async function AutomacoesPage() {
 
       <section className="standard-grid-v14 three automation-kpi-grid automation-summary-v15">
         <article className="card standard-card-v14 mini-kpi-card"><Workflow size={20} /><span>Automações ativas</span><strong>{active.length}</strong></article>
-        <article className="card standard-card-v14 mini-kpi-card"><Bot size={20} /><span>Modo do SDR</span><strong>{modeLabel(sdrMode)}</strong></article>
+        <article className="card standard-card-v14 mini-kpi-card"><Bot size={20} /><span>Modo do SDR</span><strong>{modeLabel(sdrMode, autoSendEnabled)}</strong></article>
         <article className="card standard-card-v14 mini-kpi-card"><Clock size={20} /><span>Execuções registradas</span><strong>{runs.length}</strong></article>
       </section>
 
@@ -94,7 +94,7 @@ export default async function AutomacoesPage() {
                 <input type="radio" name="mode" value="auto" defaultChecked={sdrMode === "auto"} />
                 <span>
                   <strong>Responder automático</strong>
-                  <small>Usar só depois de validar. Também exige NEXTLEAD_ENABLE_AUTO_SDR=true.</small>
+                  <small>Responde sozinho quando o lead mandar mensagem. Exige NEXTLEAD_ENABLE_AUTO_SDR=true.</small>
                 </span>
               </label>
             </div>
@@ -103,6 +103,14 @@ export default async function AutomacoesPage() {
               <input type="checkbox" name="enabled" defaultChecked={sdr?.enabled !== false} />
               <span>Automação ativa</span>
             </label>
+
+            <div className={`automation-auto-status-v16 ${autoSendEnabled ? "ready" : "locked"}`}>
+              <ShieldCheck size={18} />
+              <div>
+                <strong>{autoSendEnabled ? "Automático liberado" : "Automático ainda bloqueado"}</strong>
+                <span>{autoSendEnabled ? "Quando o modo estiver em Responder automático, o webhook do WhatsApp pode responder o lead sozinho." : "Para responder sozinho, adicione NEXTLEAD_ENABLE_AUTO_SDR=true na Vercel e faça redeploy. Sem isso, ele só gera sugestão."}</span>
+              </div>
+            </div>
 
             <div className="automation-safe-note">
               <ShieldCheck size={18} />
@@ -133,12 +141,13 @@ export default async function AutomacoesPage() {
             <div className="gemini-steps-v15">
               <div><KeyRound size={16} /><span>1. Gere uma API key no Google AI Studio.</span></div>
               <div><Sparkles size={16} /><span>2. Adicione na Vercel como <code>GEMINI_API_KEY</code>.</span></div>
-              <div><CheckCircle2 size={16} /><span>3. Adicione <code>GEMINI_MODEL={geminiModel}</code> e faça redeploy.</span></div>
+              <div><CheckCircle2 size={16} /><span>3. Adicione <code>GEMINI_MODEL={geminiModel}</code>.</span></div>
+              <div><ShieldCheck size={16} /><span>4. Para responder sozinho, adicione <code>NEXTLEAD_ENABLE_AUTO_SDR=true</code> e faça redeploy.</span></div>
             </div>
             <div className="gemini-env-v15">
               <span>Envio automático</span>
-              <strong>{autoSendEnabled ? "Liberado" : "Bloqueado por segurança"}</strong>
-              <small>Para liberar no futuro: NEXTLEAD_ENABLE_AUTO_SDR=true</small>
+              <strong>{autoSendEnabled ? "Liberado" : "Aguardando NEXTLEAD_ENABLE_AUTO_SDR=true"}</strong>
+              <small>{autoSendEnabled ? "O webhook agora dispara o SDR quando chegar mensagem recebida." : "A chave Gemini sozinha não ativa envio automático."}</small>
             </div>
           </article>
 
@@ -150,7 +159,7 @@ export default async function AutomacoesPage() {
                   <span className="template-icon"><MessageCircle size={17} /></span>
                   <div>
                     <strong>{automation.name}</strong>
-                    <small>{typeLabel(automation.type)} • {modeLabel(automation.mode)}</small>
+                    <small>{typeLabel(automation.type)} • {modeLabel(automation.mode, autoSendEnabled)}</small>
                     <p>{automation.description}</p>
                   </div>
                   <span className={`status-pill ${automation.enabled ? "success" : "neutral"}`}>{automation.enabled ? "on" : "off"}</span>

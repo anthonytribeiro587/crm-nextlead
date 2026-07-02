@@ -10082,3 +10082,49 @@ button:disabled {
     width: 100%;
   }
 }
+
+/* v14.6 — Automático SDR mais claro */
+.automation-auto-status-v16 {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 13px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.035);
+}
+.automation-auto-status-v16 svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.automation-auto-status-v16 strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+.automation-auto-status-v16 span {
+  display: block;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.automation-auto-status-v16.ready {
+  border-color: rgba(34,197,94,.26);
+  background: rgba(34,197,94,.10);
+}
+.automation-auto-status-v16.ready svg { color: #22c55e; }
+.automation-auto-status-v16.locked {
+  border-color: rgba(245,158,11,.28);
+  background: rgba(245,158,11,.09);
+}
+.automation-auto-status-v16.locked svg { color: #f59e0b; }
+:root[data-theme="light"] .automation-auto-status-v16 {
+  background: #fff;
+}
+:root[data-theme="light"] .automation-auto-status-v16.ready {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+:root[data-theme="light"] .automation-auto-status-v16.locked {
+  background: #fffbeb;
+  border-color: #fde68a;
+}

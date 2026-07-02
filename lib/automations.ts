@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "./supabase-admin";
 import { applyTenantFilter, getTenantContext, withTenant, type TenantContext } from "./tenant";
 import type { Contact, Deal, LeadTemperature, Message, Pipeline, Stage } from "./types";
+import { sendWhatsAppText } from "./whatsapp";
 
 export type AutomationMode = "off" | "suggest" | "auto";
 export type AutomationType = "sdr_nextlead" | "welcome" | "followup" | "post_proposal" | string;
@@ -249,6 +250,282 @@ function inferWantsWhatsappLeads(text: string): SdrAnalysis["extracted"]["wantsW
   if (hasAny(lower, ["whatsapp", "zap", "orçamento", "orcamento", "mais clientes", "leads", "chamar", "mensagem"])) return "sim";
   if (hasAny(lower, ["não quero whatsapp", "nao quero whatsapp", "só catálogo", "so catalogo"])) return "nao";
   return "nao_informado";
+}
+
+
+function mapContactRow(row: any): Contact {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    email: row.email || undefined,
+    company: row.company || undefined,
+    source: row.source || "WhatsApp",
+    owner: row.owner || "NextLead",
+    temperature: row.temperature || "morno",
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    lastMessageAt: row.last_message_at || row.created_at || new Date().toISOString(),
+    notes: row.notes || undefined,
+  };
+}
+
+function mapDealRow(row: any): Deal {
+  return {
+    id: row.id,
+    contactId: row.contact_id,
+    title: row.title || "Oportunidade",
+    value: Number(row.value || 0),
+    pipelineId: row.pipeline_id || undefined,
+    stageId: row.stage_id,
+    status: row.status || "aberto",
+    expectedClose: row.expected_close || undefined,
+    lostReason: row.lost_reason || undefined,
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
+  };
+}
+
+function mapMessageRow(row: any): Message {
+  return {
+    id: row.id,
+    contactId: row.contact_id,
+    direction: row.direction,
+    body: row.body,
+    status: row.status || "received",
+    createdAt: row.created_at || new Date().toISOString(),
+    providerMessageId: row.provider_message_id || undefined,
+    type: row.type || "text",
+  };
+}
+
+async function insertAutomationRun(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  tenant: TenantContext,
+  record: Record<string, any>,
+) {
+  const full = withTenant(record, tenant);
+  const { error } = await supabase.from("automation_runs").insert(full);
+  return error;
+}
+
+function isAutoSdrGloballyEnabled() {
+  return String(process.env.NEXTLEAD_ENABLE_AUTO_SDR || "").toLowerCase() === "true";
+}
+
+function shouldSkipBecauseRecentRun(runs: any[], mode: AutomationMode) {
+  if (mode !== "auto") return false;
+  const cooldownMs = Number(process.env.NEXTLEAD_AUTO_SDR_COOLDOWN_SECONDS || 35) * 1000;
+  const now = Date.now();
+  return (runs || []).some((run) => {
+    const created = new Date(run.created_at || 0).getTime();
+    if (!created || Number.isNaN(created)) return false;
+    return now - created < cooldownMs && String(run.status || "") === "success";
+  });
+}
+
+export type RunSdrAutomationInput = {
+  contactId: string;
+  tenant?: TenantContext;
+  requestedMode?: AutomationMode;
+  source?: "manual" | "webhook";
+};
+
+export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    const analysis = analyzeSdrLocally({ messages: [] });
+    return { ok: true, demo: true, mode: "suggest" as AutomationMode, sent: false, analysis };
+  }
+
+  const tenant = input.tenant || (await getTenantContext());
+  const automationId = await ensureDefaultAutomations(supabase, tenant);
+  const automationResult = automationId
+    ? await applyTenantFilter(
+        supabase.from("automations").select("id,enabled,mode,type").eq("id", automationId).limit(1),
+        tenant,
+      ).maybeSingle()
+    : ({ data: null, error: null } as any);
+
+  const automation = automationResult.data;
+  const storedMode = (automation?.mode || "suggest") as AutomationMode;
+  const mode = input.requestedMode || storedMode;
+
+  if (automation && (automation.enabled === false || mode === "off")) {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation.id,
+      contact_id: input.contactId,
+      status: "skipped",
+      summary: "Automação SDR desligada.",
+      input: { contactId: input.contactId, mode, source: input.source || "manual" },
+    });
+    return { ok: true, skipped: true, mode, sent: false, reason: "Automação SDR desligada." };
+  }
+
+  const contactResult = await applyTenantFilter(
+    supabase.from("contacts").select("id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at,created_at").eq("id", input.contactId).limit(1),
+    tenant,
+  ).maybeSingle();
+
+  if (contactResult.error || !contactResult.data?.id) {
+    return { ok: false, status: 404, error: contactResult.error?.message || "Contato não encontrado." };
+  }
+
+  const contact = mapContactRow(contactResult.data);
+
+  const recentRuns = await applyTenantFilter(
+    supabase
+      .from("automation_runs")
+      .select("id,status,summary,created_at")
+      .eq("contact_id", contact.id)
+      .order("created_at", { ascending: false })
+      .limit(3),
+    tenant,
+  );
+
+  if (shouldSkipBecauseRecentRun(recentRuns.data || [], mode)) {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      contact_id: contact.id,
+      status: "skipped",
+      summary: "SDR automático ignorado por cooldown anti-duplicidade.",
+      input: { contactId: contact.id, mode, source: input.source || "manual" },
+    });
+    return { ok: true, skipped: true, mode, sent: false, reason: "Cooldown anti-duplicidade." };
+  }
+
+  const dealsResult = await applyTenantFilter(
+    supabase
+      .from("deals")
+      .select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at,updated_at")
+      .eq("contact_id", contact.id)
+      .eq("status", "aberto")
+      .order("updated_at", { ascending: false })
+      .limit(1),
+    tenant,
+  ).maybeSingle();
+  const deal = dealsResult.data ? mapDealRow(dealsResult.data) : undefined;
+
+  let stage: Stage | undefined;
+  let pipeline: Pipeline | undefined;
+
+  if (deal?.stageId) {
+    const stageResult = await applyTenantFilter(
+      supabase.from("pipeline_stages").select("id,pipeline_id,title,position,color").eq("id", deal.stageId).limit(1),
+      tenant,
+    ).maybeSingle();
+    if (stageResult.data) {
+      stage = {
+        id: stageResult.data.id,
+        pipelineId: stageResult.data.pipeline_id,
+        title: stageResult.data.title,
+        order: stageResult.data.position,
+        color: stageResult.data.color || "#4f8cff",
+      };
+    }
+  }
+
+  const pipelineId = deal?.pipelineId || stage?.pipelineId;
+  if (pipelineId) {
+    const pipelineResult = await applyTenantFilter(
+      supabase.from("pipelines").select("id,name,created_at").eq("id", pipelineId).limit(1),
+      tenant,
+    ).maybeSingle();
+    if (pipelineResult.data) pipeline = { id: pipelineResult.data.id, name: pipelineResult.data.name, createdAt: pipelineResult.data.created_at || undefined };
+  }
+
+  const messagesResult = await applyTenantFilter(
+    supabase
+      .from("messages")
+      .select("id,contact_id,direction,body,status,type,provider_message_id,created_at")
+      .eq("contact_id", contact.id)
+      .order("created_at", { ascending: false })
+      .limit(14),
+    tenant,
+  );
+  const messages = (messagesResult.data || []).map(mapMessageRow).reverse();
+
+  const analysis = process.env.GEMINI_API_KEY
+    ? await analyzeSdrWithGemini({ contact, deal, stage, pipeline, messages })
+    : analyzeSdrLocally({ contact, deal, stage, pipeline, messages });
+
+  await applyTenantFilter(supabase.from("contacts").update({ temperature: analysis.temperature, updated_at: new Date().toISOString() }).eq("id", contact.id), tenant);
+
+  const historyTitle = analysis.shouldHandoff
+    ? `IA SDR qualificou lead como ${analysis.temperature}. ${analysis.handoffReason}`
+    : `IA SDR gerou sugestão. Próxima pergunta: ${analysis.nextQuestion}`;
+
+  await supabase.from("activities").insert(
+    withTenant(
+      {
+        contact_id: contact.id,
+        title: historyTitle,
+        due_at: new Date().toISOString(),
+        done: true,
+        updated_at: new Date().toISOString(),
+      },
+      tenant,
+    ),
+  );
+
+  let sent = false;
+  let providerMessageId: string | undefined;
+  const canAutoSend = mode === "auto" && isAutoSdrGloballyEnabled() && Boolean(contact.phone);
+
+  if (canAutoSend) {
+    try {
+      const result = await sendWhatsAppText({ to: contact.phone, body: analysis.suggestedReply });
+      providerMessageId = result.providerMessageId;
+      sent = true;
+      await supabase.from("messages").insert(
+        withTenant(
+          {
+            contact_id: contact.id,
+            direction: "outbound",
+            body: analysis.suggestedReply,
+            type: "text",
+            status: "sent",
+            provider: result.provider,
+            provider_message_id: providerMessageId,
+            raw_payload: result.payload,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          tenant,
+        ),
+      );
+    } catch (error: any) {
+      await insertAutomationRun(supabase, tenant, {
+        automation_id: automation?.id || automationId,
+        contact_id: contact.id,
+        deal_id: deal?.id || null,
+        status: "error",
+        summary: "Falha ao enviar resposta automática do SDR.",
+        input: { contactId: contact.id, mode, source: input.source || "manual" },
+        output: analysis,
+        error: error.message,
+      });
+      return { ok: false, status: 500, error: error.message, mode, sent: false, analysis };
+    }
+  }
+
+  await insertAutomationRun(supabase, tenant, {
+    automation_id: automation?.id || automationId,
+    contact_id: contact.id,
+    deal_id: deal?.id || null,
+    status: "success",
+    summary: sent ? "IA SDR respondeu automaticamente." : "IA SDR gerou sugestão de atendimento.",
+    input: { contactId: contact.id, mode, source: input.source || "manual" },
+    output: { ...analysis, autoSendEnabled: isAutoSdrGloballyEnabled(), providerMessageId },
+  });
+
+  if (automation?.id) {
+    await applyTenantFilter(
+      supabase.from("automations").update({ last_run_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", automation.id),
+      tenant,
+    );
+  }
+
+  return { ok: true, mode, sent, autoSendEnabled: isAutoSdrGloballyEnabled(), analysis };
 }
 
 export function analyzeSdrLocally(input: {
