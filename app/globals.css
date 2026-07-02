@@ -8876,3 +8876,73 @@ button:disabled {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* NextLead CRM — v13.7: painel sem botões escondidos + performance visual */
+.lead-inspector .inspector-tabs {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  overflow: visible !important;
+  padding: 10px 0 12px !important;
+  background: rgba(6, 12, 26, .94) !important;
+}
+
+.lead-inspector .inspector-tabs button {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 44px !important;
+  padding: 0 10px !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 430px) {
+  .lead-inspector .inspector-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Evita que abas/controles sejam cortados em notebooks e monitores menores */
+.lead-inspector .inspector-scroll-area,
+.lead-inspector .inspector-content-card {
+  contain: layout paint;
+}
+
+/* Performance: reduz custo de blur/sombras grandes em áreas que vivem rolando */
+.app-shell,
+.main,
+.dashboard-card,
+.crm-card,
+.inspector-card,
+.thread-list-pro,
+.chat-panel-pro,
+.stage-lean,
+.service-orders-panel,
+.setup-panel,
+.login-card {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.lead-inspector {
+  box-shadow: -12px 0 34px rgba(0,0,0,.38) !important;
+}
+
+.whatsapp-bubble,
+.thread-pro,
+.crm-contact-row,
+.stage-lean,
+.dashboard-card,
+.inspector-card,
+.btn,
+.smart-select-trigger {
+  transition-duration: .12s !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
