@@ -72,11 +72,11 @@ export function Shell({
   branding?: { appName: string; tagline: string; markUrl: string };
 }) {
   const pathname = usePathname();
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
     const saved = window.localStorage.getItem("nextlead-theme");
-    const nextTheme = saved === "dark" || saved === "light" ? saved : "light";
+    const nextTheme = saved === "dark" || saved === "light" ? saved : "dark";
     setTheme(nextTheme);
     document.documentElement.dataset.theme = nextTheme;
   }, []);

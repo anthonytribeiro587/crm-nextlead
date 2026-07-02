@@ -9442,3 +9442,125 @@ button:disabled {
 :root[data-theme="light"] .smart-select-menu-portal button.selected::after {
   color: #0891b2 !important;
 }
+
+/* NextLead CRM v14.1 — rollback seguro: tema escuro como padrão + modo claro sem quebrar contraste
+   Mantém a navegação por categorias, mas evita vender o tema claro como final ainda. */
+.app-shell-v14 .main-v14 {
+  overflow-x: hidden;
+}
+
+/* Sidebar v14: garantir que administração não fique escondida atrás do card do usuário */
+.sidebar-v14 {
+  overflow: hidden;
+}
+.sidebar-v14 .nav-v14 {
+  max-height: calc(100vh - 150px);
+  padding-bottom: 190px !important;
+}
+.sidebar-v14 .user-card-v14 {
+  z-index: 8;
+}
+
+/* Light mode beta: reduzir problemas de contraste/legibilidade herdados do tema dark */
+:root[data-theme="light"] .lead-inspector,
+:root[data-theme="light"] .lead-inspector *,
+:root[data-theme="light"] .chat-head-pro,
+:root[data-theme="light"] .chat-head-pro *,
+:root[data-theme="light"] .lead-status-card,
+:root[data-theme="light"] .lead-status-card *,
+:root[data-theme="light"] .inspector-card,
+:root[data-theme="light"] .inspector-card * {
+  color: #142033;
+}
+:root[data-theme="light"] .lead-inspector .eyebrow-small,
+:root[data-theme="light"] .lead-inspector .eyebrow,
+:root[data-theme="light"] .chat-head-pro .eyebrow-small,
+:root[data-theme="light"] .chat-head-pro .eyebrow,
+:root[data-theme="light"] .lead-status-card .eyebrow-small,
+:root[data-theme="light"] .lead-status-card .eyebrow {
+  color: #0891b2 !important;
+}
+:root[data-theme="light"] .lead-status-card,
+:root[data-theme="light"] .inspector-card,
+:root[data-theme="light"] .inbox-os-draft,
+:root[data-theme="light"] .proposal-summary-pro,
+:root[data-theme="light"] .lead-inspector .smart-select-trigger,
+:root[data-theme="light"] .chat-head-pro .smart-select-trigger {
+  background: #ffffff !important;
+  border-color: rgba(15,23,42,.10) !important;
+  color: #142033 !important;
+}
+:root[data-theme="light"] .lead-status-card small,
+:root[data-theme="light"] .chat-head-pro small,
+:root[data-theme="light"] .thread-pro small,
+:root[data-theme="light"] .activity-card small {
+  color: #64748b !important;
+}
+:root[data-theme="light"] .messages-pro .message:not(.outbound) small,
+:root[data-theme="light"] .messages-pro .message:not(.outbound) * {
+  color: #142033 !important;
+}
+
+/* Inbox header: não deixar funil esmagar contato no desktop menor */
+.chat-head-pro {
+  min-width: 0;
+}
+.chat-head-pro .lead-status-card {
+  min-width: 280px;
+  max-width: 460px;
+}
+.chat-head-pro .contact-heading,
+.chat-head-pro .contact-heading * {
+  min-width: 0;
+}
+@media (max-width: 1380px) {
+  .chat-head-pro {
+    grid-template-columns: minmax(190px, .72fr) minmax(260px, 1fr) auto !important;
+    gap: 12px !important;
+  }
+  .chat-head-pro .lead-status-card {
+    min-width: 250px;
+  }
+  .lead-panel-trigger {
+    min-width: 148px !important;
+    max-width: 210px !important;
+  }
+  .lead-panel-trigger-copy small {
+    display: none !important;
+  }
+}
+@media (max-width: 1180px) {
+  .chat-head-pro {
+    grid-template-columns: 1fr !important;
+    align-items: stretch !important;
+  }
+  .chat-head-pro .lead-status-card,
+  .lead-panel-trigger {
+    max-width: none !important;
+    width: 100% !important;
+  }
+}
+
+/* Agenda: histórico não deve grudar nome/data sem separação visual */
+.activity-card.done,
+.activity-card {
+  gap: 10px !important;
+}
+.activity-card.done strong,
+.activity-card strong {
+  display: block;
+  line-height: 1.25;
+}
+.activity-card.done small,
+.activity-card small {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+/* Modo claro fica marcado como beta visual: menos agressivo, sem forçar tudo branco dentro de componentes complexos */
+:root[data-theme="light"] .inbox-pro.inspector-open .lead-inspector header,
+:root[data-theme="light"] .lead-inspector header {
+  background: #ffffff !important;
+  color: #142033 !important;
+}
