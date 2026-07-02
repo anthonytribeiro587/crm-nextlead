@@ -564,6 +564,7 @@ export async function persistEvolutionWebhook(payload: any) {
   let saved = 0;
   let skipped = 0;
   const errors: string[] = [];
+  const automationResults: any[] = [];
 
   for (const item of messages) {
     const key = item?.key || item?.data?.key || {};
@@ -651,9 +652,17 @@ export async function persistEvolutionWebhook(payload: any) {
     if (!fromMe) {
       try {
         await ensureDefaultAutomations(supabase, tenant);
-        await runSdrAutomationForContact({ contactId: contact.id, tenant, source: "webhook" });
+        const automationResult = await runSdrAutomationForContact({ contactId: contact.id, tenant, source: "webhook" });
+        automationResults.push({ phone, contactId: contact.id, ...automationResult });
+        console.info("NextLead SDR webhook result", JSON.stringify({ phone, contactId: contact.id, ...automationResult }).slice(0, 1800));
+        if (!automationResult?.ok) {
+          errors.push(`automation:${phone}:${automationResult?.error || automationResult?.reason || "sem detalhes"}`);
+        }
       } catch (automationError) {
-        errors.push(`automation:${phone}:${automationError instanceof Error ? automationError.message : "erro"}`);
+        const message = automationError instanceof Error ? automationError.message : "erro";
+        automationResults.push({ phone, contactId: contact.id, ok: false, error: message });
+        console.error("NextLead SDR webhook error", message);
+        errors.push(`automation:${phone}:${message}`);
       }
     }
   }
@@ -663,6 +672,7 @@ export async function persistEvolutionWebhook(payload: any) {
     messages: saved,
     skipped,
     errors,
+    automationResults,
     event: payload?.event || null,
   };
 }

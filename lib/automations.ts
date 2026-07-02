@@ -378,13 +378,41 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
     return { ok: true, skipped: true, mode, sent: false, reason: "Automação SDR desligada." };
   }
 
-  const contactResult = await applyTenantFilter(
-    supabase.from("contacts").select("id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at,created_at").eq("id", input.contactId).limit(1),
+  let contactResult = await applyTenantFilter(
+    supabase.from("contacts").select("id,tenant_id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at,created_at").eq("id", input.contactId).limit(1),
     tenant,
   ).maybeSingle();
 
+  // Compatibilidade SaaS: alguns contatos antigos foram criados antes de tenant_id.
+  // Se o webhook salvou a mensagem, mas o SDR não acha o contato pelo filtro do tenant,
+  // tentamos recuperar pelo id sem filtro e vinculamos ao tenant atual quando estiver vazio.
+  if ((contactResult.error || !contactResult.data?.id) && tenant.tenantTableReady) {
+    const fallbackContact = await supabase
+      .from("contacts")
+      .select("id,tenant_id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at,created_at")
+      .eq("id", input.contactId)
+      .limit(1)
+      .maybeSingle();
+
+    if (fallbackContact.data?.id && !fallbackContact.data.tenant_id) {
+      await supabase.from("contacts").update({ tenant_id: tenant.id, updated_at: new Date().toISOString() }).eq("id", fallbackContact.data.id);
+      fallbackContact.data.tenant_id = tenant.id;
+    }
+
+    if (fallbackContact.data?.id && (!fallbackContact.data.tenant_id || fallbackContact.data.tenant_id === tenant.id)) {
+      contactResult = fallbackContact as any;
+    }
+  }
+
   if (contactResult.error || !contactResult.data?.id) {
-    return { ok: false, status: 404, error: contactResult.error?.message || "Contato não encontrado." };
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      status: "error",
+      summary: "SDR não encontrou o contato no tenant atual.",
+      input: { contactId: input.contactId, mode, source: input.source || "manual" },
+      error: contactResult.error?.message || "Contato não encontrado.",
+    });
+    return { ok: false, status: 404, error: contactResult.error?.message || "Contato não encontrado.", reason: "contact_not_found_for_tenant" };
   }
 
   const contact = mapContactRow(contactResult.data);
@@ -619,7 +647,7 @@ export async function analyzeSdrWithGemini(input: {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return analyzeSdrLocally(input);
 
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const local = analyzeSdrLocally(input);
   const transcript = input.messages
     .slice(-12)
@@ -672,7 +700,7 @@ Formato obrigatório:
 
 export async function testGeminiConnection(samplePrompt = "Responda apenas: Gemini conectado.") {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   if (!apiKey) {
     return { ok: false, configured: false, model, error: "GEMINI_API_KEY não configurada no deploy." };
   }
