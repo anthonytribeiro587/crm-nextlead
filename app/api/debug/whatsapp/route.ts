@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth-server";
 import { getEvolutionConnectionState, getWhatsAppProvider } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,11 @@ function mask(value?: string) {
 }
 
 export async function GET() {
+  const user = getCurrentUser();
+  if (!user || user.role !== "admin") {
+    return NextResponse.json({ error: "Apenas admin pode acessar diagnóstico técnico." }, { status: 403 });
+  }
+
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
   const callbackUrl = appUrl ? `${appUrl}/api/whatsapp/webhook${process.env.WHATSAPP_WEBHOOK_SECRET ? "?secret=configurado" : ""}` : null;
   const provider = getWhatsAppProvider();
@@ -29,7 +35,7 @@ export async function GET() {
     provider,
     evolution: {
       hasApiUrl: Boolean(process.env.EVOLUTION_API_URL),
-      apiUrl: process.env.EVOLUTION_API_URL || null,
+      apiUrl: mask(process.env.EVOLUTION_API_URL),
       hasApiKey: Boolean(process.env.EVOLUTION_API_KEY),
       apiKey: mask(process.env.EVOLUTION_API_KEY),
       instance: process.env.EVOLUTION_INSTANCE || null,

@@ -1,6 +1,7 @@
 import { EvolutionSetupPanel } from "@/components/EvolutionSetupPanel";
 import { WhatsAppTestPanel } from "@/components/WhatsAppTestPanel";
 import { getWhatsAppProvider } from "@/lib/whatsapp";
+import { getCurrentUser } from "@/lib/auth-server";
 
 function statusBadge(active: boolean, label: string) {
   return <span className={`status-dot ${active ? "ok" : "warn"}`}>{label}</span>;
@@ -13,6 +14,19 @@ function mask(value?: string) {
 }
 
 export default function ConfigPage() {
+  const user = getCurrentUser();
+  if (!user || user.role !== "admin") {
+    return (
+      <div className="topbar">
+        <div>
+          <p className="eyebrow">Configurações</p>
+          <h1>Acesso restrito.</h1>
+          <p className="description">Apenas administradores podem ver as integrações técnicas do CRM.</p>
+        </div>
+      </div>
+    );
+  }
+
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://nextlead-crm.vercel.app").replace(/\/$/, "");
   const webhookSecret = process.env.WHATSAPP_WEBHOOK_SECRET;
   const webhookUrl = `${appUrl}/api/whatsapp/webhook${webhookSecret ? `?secret=${encodeURIComponent(webhookSecret)}` : ""}`;

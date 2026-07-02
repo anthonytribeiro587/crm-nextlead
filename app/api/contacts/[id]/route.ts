@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { normalizeBrazilWhatsAppPhone } from "@/lib/format";
 import { logCommercialActivity } from "@/lib/commercial-events";
+import { applyTenantFilter, getTenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -76,26 +77,28 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ ok: true, demo: true });
   }
 
-  const { data: previousContact } = await supabase
+  const tenant = await getTenantContext(request.headers.get("host"));
+
+  const { data: previousContact } = await applyTenantFilter(supabase
     .from("contacts")
     .select("temperature,owner,name,company")
-    .eq("id", contactId)
+    .eq("id", contactId), tenant)
     .maybeSingle();
 
-  let result: any = await supabase
+  let result: any = await applyTenantFilter(supabase
     .from("contacts")
     .update(update)
-    .eq("id", contactId)
+    .eq("id", contactId), tenant)
     .select("id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at")
     .single();
 
   if (result.error?.message.toLowerCase().includes("owner")) {
     const fallbackUpdate = { ...update };
     delete fallbackUpdate.owner;
-    result = await supabase
+    result = await applyTenantFilter(supabase
       .from("contacts")
       .update(fallbackUpdate)
-      .eq("id", contactId)
+      .eq("id", contactId), tenant)
       .select("id,name,phone,email,company,source,temperature,tags,notes,last_message_at")
       .single();
   }
@@ -105,21 +108,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 
   if (payload.temperature !== undefined && previousContact?.temperature !== result.data?.temperature) {
-    await logCommercialActivity(supabase, { contactId, title: `Temperatura alterada para ${result.data?.temperature}`, done: true });
+    await logCommercialActivity(supabase, { contactId, title: `Temperatura alterada para ${result.data?.temperature}`, done: true, tenant });
   }
 
   if (payload.owner !== undefined && previousContact?.owner !== result.data?.owner) {
-    await logCommercialActivity(supabase, { contactId, title: `Responsável alterado para ${result.data?.owner || "NextLead"}`, done: true });
+    await logCommercialActivity(supabase, { contactId, title: `Responsável alterado para ${result.data?.owner || "NextLead"}`, done: true, tenant });
   }
 
   if ((payload.name !== undefined || payload.company !== undefined || payload.notes !== undefined) && previousContact) {
-    await logCommercialActivity(supabase, { contactId, title: "Dados do lead atualizados", done: true });
+    await logCommercialActivity(supabase, { contactId, title: "Dados do lead atualizados", done: true, tenant });
   }
 
   return NextResponse.json({ ok: true, contact: result.data });
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const contactId = params.id;
 
   if (!contactId) {
@@ -135,12 +138,14 @@ export async function DELETE(_request: NextRequest, { params }: { params: { id: 
     return NextResponse.json({ ok: true, demo: true });
   }
 
-  await supabase.from("activities").delete().eq("contact_id", contactId);
-  await supabase.from("messages").delete().eq("contact_id", contactId);
-  await supabase.from("deals").delete().eq("contact_id", contactId);
-  await supabase.from("service_orders").delete().eq("contact_id", contactId);
+  const tenant = await getTenantContext(request.headers.get("host"));
 
-  const { error } = await supabase.from("contacts").delete().eq("id", contactId);
+  await applyTenantFilter(supabase.from("activities").delete().eq("contact_id", contactId), tenant);
+  await applyTenantFilter(supabase.from("messages").delete().eq("contact_id", contactId), tenant);
+  await applyTenantFilter(supabase.from("deals").delete().eq("contact_id", contactId), tenant);
+  await applyTenantFilter(supabase.from("service_orders").delete().eq("contact_id", contactId), tenant);
+
+  const { error } = await applyTenantFilter(supabase.from("contacts").delete().eq("id", contactId), tenant);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

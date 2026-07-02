@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logCommercialActivity } from "@/lib/commercial-events";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { applyTenantFilter, getTenantContext, withTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -45,7 +46,7 @@ function serviceOrderSelect() {
 }
 
 
-async function generateNextServiceOrderCode(supabase: ReturnType<typeof getSupabaseAdmin>) {
+async function generateNextServiceOrderCode(supabase: ReturnType<typeof getSupabaseAdmin>, tenant?: Awaited<ReturnType<typeof getTenantContext>>) {
   const now = new Date();
   const year = now.getFullYear();
   const start = `${year}-01-01T00:00:00.000Z`;
@@ -53,11 +54,11 @@ async function generateNextServiceOrderCode(supabase: ReturnType<typeof getSupab
 
   if (!supabase) return `${year} - 1`;
 
-  const { data, error } = await supabase
+  const { data, error } = await applyTenantFilter(supabase
     .from("service_orders")
     .select("code,created_at")
     .gte("created_at", start)
-    .lt("created_at", end);
+    .lt("created_at", end), tenant as any);
 
   if (error) return `${year} - ${Date.now().toString().slice(-4)}`;
 
@@ -91,6 +92,7 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return NextResponse.json({ ok: true, demo: true });
 
+  const tenant = await getTenantContext(request.headers.get("host"));
   const dueAt = cleanDateTime(payload.dueAt ?? payload.due_at);
   const estimatedValue = parseMoney(payload.estimatedValue ?? payload.estimated_value);
   const finalValue = parseMoney(payload.finalValue ?? payload.final_value);
@@ -102,13 +104,13 @@ export async function POST(request: NextRequest) {
 
   const shouldPreventDuplicate = Boolean(payload.preventDuplicate);
   if (shouldPreventDuplicate) {
-    const { data: existingOrder } = await supabase
+    const { data: existingOrder } = await applyTenantFilter(supabase
       .from("service_orders")
       .select(serviceOrderSelect())
       .eq("contact_id", contactId)
       .not("status", "in", "(concluida,entregue,cancelada)")
       .order("created_at", { ascending: false })
-      .limit(1)
+      .limit(1), tenant)
       .maybeSingle();
 
     if (existingOrder) {
@@ -123,9 +125,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const code = cleanText(payload.code) || await generateNextServiceOrderCode(supabase);
+  const code = cleanText(payload.code) || await generateNextServiceOrderCode(supabase, tenant);
 
-  const insert = {
+  const insert = withTenant({
     contact_id: contactId,
     deal_id: cleanText(payload.dealId ?? payload.deal_id) || null,
     code,
@@ -138,7 +140,7 @@ export async function POST(request: NextRequest) {
     final_value: finalValue ?? 0,
     due_at: dueAt === undefined ? null : dueAt,
     internal_notes: cleanText(payload.internalNotes ?? payload.internal_notes) || null,
-  };
+  }, tenant);
 
   const { data, error } = await supabase.from("service_orders").insert(insert).select(serviceOrderSelect()).single();
 
@@ -148,7 +150,7 @@ export async function POST(request: NextRequest) {
   }
 
   const savedOrder = data as any;
-  await logCommercialActivity(supabase, { contactId, title: `OS criada: ${savedOrder.code} · ${savedOrder.title}`, done: true });
+  await logCommercialActivity(supabase, { contactId, title: `OS criada: ${savedOrder.code} · ${savedOrder.title}`, done: true, tenant });
 
   return NextResponse.json({ ok: true, serviceOrder: savedOrder });
 }
@@ -164,6 +166,7 @@ export async function PATCH(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return NextResponse.json({ ok: true, demo: true });
 
+  const tenant = await getTenantContext(request.headers.get("host"));
   const update: Record<string, any> = { updated_at: new Date().toISOString() };
   if (payload.title !== undefined) update.title = cleanText(payload.title, "Ordem de serviço");
   if (payload.description !== undefined) update.description = cleanText(payload.description) || null;
@@ -194,7 +197,7 @@ export async function PATCH(request: NextRequest) {
     update.priority = priority;
   }
 
-  const { data, error } = await supabase.from("service_orders").update(update).eq("id", orderId).select(serviceOrderSelect()).single();
+  const { data, error } = await applyTenantFilter(supabase.from("service_orders").update(update).eq("id", orderId), tenant).select(serviceOrderSelect()).single();
 
   if (error) {
     if (error.message.toLowerCase().includes("service_orders") || error.code === "42P01") return tableMissingResponse(error.message);
@@ -204,7 +207,7 @@ export async function PATCH(request: NextRequest) {
   const savedOrder = data as any;
   if (savedOrder?.contact_id) {
     const statusLabel = status ? `Status da OS alterado para ${status.replaceAll("_", " ")}` : "Ordem de serviço atualizada";
-    await logCommercialActivity(supabase, { contactId: savedOrder.contact_id, title: `${statusLabel}: ${savedOrder.code}`, done: true });
+    await logCommercialActivity(supabase, { contactId: savedOrder.contact_id, title: `${statusLabel}: ${savedOrder.code}`, done: true, tenant });
   }
 
   return NextResponse.json({ ok: true, serviceOrder: savedOrder });

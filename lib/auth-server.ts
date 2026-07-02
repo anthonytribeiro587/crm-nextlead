@@ -13,7 +13,12 @@ export type SessionUser = {
 };
 
 function getSecret() {
-  return process.env.NEXTLEAD_AUTH_SECRET || process.env.AUTH_SECRET || "nextlead-mvp-secret-change-me";
+  const secret = process.env.NEXTLEAD_AUTH_SECRET || process.env.AUTH_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("NEXTLEAD_AUTH_SECRET/AUTH_SECRET não configurado em produção.");
+  }
+  return "nextlead-dev-secret-change-me";
 }
 
 function base64Url(input: Buffer | string) {

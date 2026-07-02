@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { applyTenantFilter, getTenantContext, withTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -36,13 +37,14 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return NextResponse.json({ ok: true, demo: true });
 
+  const tenant = await getTenantContext(request.headers.get("host"));
   const title = cleanTitle(payload.title);
   const dueAt = cleanDueAt(payload.dueAt);
   const done = Boolean(payload.done);
 
   if (!done) {
     const { start, end } = dayRange(dueAt);
-    const { data: existing } = await supabase
+    const { data: existing } = await applyTenantFilter(supabase
       .from("activities")
       .select("id,contact_id,title,due_at,done")
       .eq("contact_id", contactId)
@@ -51,7 +53,7 @@ export async function POST(request: NextRequest) {
       .gte("due_at", start)
       .lt("due_at", end)
       .order("due_at", { ascending: true })
-      .limit(1)
+      .limit(1), tenant)
       .maybeSingle();
 
     if (existing) {
@@ -59,12 +61,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const record = {
+  const record = withTenant({
     contact_id: contactId,
     title,
     due_at: dueAt,
     done,
-  };
+  }, tenant);
 
   const { data, error } = await supabase.from("activities").insert(record).select("id,contact_id,title,due_at,done").single();
 
@@ -86,24 +88,26 @@ export async function PATCH(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return NextResponse.json({ ok: true, demo: true });
 
+  const tenant = await getTenantContext(request.headers.get("host"));
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (payload.done !== undefined) update.done = Boolean(payload.done);
   if (payload.title !== undefined) update.title = cleanTitle(payload.title);
   if (payload.dueAt !== undefined) update.due_at = cleanDueAt(payload.dueAt);
 
   if (payload.completeSimilar && payload.done === true && payload.contactId && payload.title && payload.dueAt) {
-    const title = cleanTitle(payload.title);
+    const tenant = await getTenantContext(request.headers.get("host"));
+  const title = cleanTitle(payload.title);
     const dueAt = cleanDueAt(payload.dueAt);
     const { start, end } = dayRange(dueAt);
 
-    const { data, error } = await supabase
+    const { data, error } = await applyTenantFilter(supabase
       .from("activities")
       .update(update)
       .eq("contact_id", String(payload.contactId).trim())
       .eq("title", title)
       .eq("done", false)
       .gte("due_at", start)
-      .lt("due_at", end)
+      .lt("due_at", end), tenant)
       .select("id,contact_id,title,due_at,done");
 
     if (error) {
@@ -113,10 +117,10 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, activities: data || [] });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await applyTenantFilter(supabase
     .from("activities")
     .update(update)
-    .eq("id", activityId)
+    .eq("id", activityId), tenant)
     .select("id,contact_id,title,due_at,done")
     .single();
 
