@@ -150,21 +150,21 @@ export async function getCrmData(): Promise<CrmData> {
 
   const pipelinesPromise = applyTenantFilter(supabase.from("pipelines").select("id,name,created_at").order("created_at", { ascending: true }), tenant);
   const stagesPromise = applyTenantFilter(supabase.from("pipeline_stages").select("id,pipeline_id,title,position,color").order("position", { ascending: true }), tenant);
-  const dealsPromise = applyTenantFilter(supabase.from("deals").select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at,updated_at").order("created_at", { ascending: false }).limit(200), tenant);
-  let messagesPromise: any = applyTenantFilter(supabase.from("messages").select("id,contact_id,direction,body,type,status,provider_message_id,raw_payload,created_at").order("created_at", { ascending: true }).limit(500), tenant);
-  const activitiesPromise = applyTenantFilter(supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(300), tenant);
+  const dealsPromise = applyTenantFilter(supabase.from("deals").select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at,updated_at").order("created_at", { ascending: false }).limit(160), tenant);
+  let messagesPromise: any = applyTenantFilter(supabase.from("messages").select("id,contact_id,direction,body,type,status,provider_message_id,raw_payload,created_at").order("created_at", { ascending: false }).limit(260), tenant);
+  const activitiesPromise = applyTenantFilter(supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(160), tenant);
   const serviceOrdersPromise = applyTenantFilter(supabase
     .from("service_orders")
     .select("id,contact_id,deal_id,code,title,description,status,priority,owner,estimated_value,final_value,due_at,started_at,completed_at,internal_notes,created_at,updated_at")
     .order("created_at", { ascending: false })
-    .limit(300), tenant);
+    .limit(160), tenant);
 
   // Tipamos como any porque fazemos fallback de select com/sem a coluna owner.
   let contactsResult: any = await applyTenantFilter(supabase
     .from("contacts")
     .select("id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at,created_at")
     .order("created_at", { ascending: false })
-    .limit(300), tenant);
+    .limit(160), tenant);
 
   let hasOwnerColumn = true;
   if (contactsResult.error?.message.toLowerCase().includes("owner")) {
@@ -173,7 +173,7 @@ export async function getCrmData(): Promise<CrmData> {
       .from("contacts")
       .select("id,name,phone,email,company,source,temperature,tags,notes,last_message_at,created_at")
       .order("created_at", { ascending: false })
-      .limit(300), tenant);
+      .limit(160), tenant);
   }
 
   let [pipelinesResult, stagesResult, dealsResult, messagesResult, activitiesResult, serviceOrdersResult]: any[] = await Promise.all([
@@ -213,7 +213,7 @@ export async function getCrmData(): Promise<CrmData> {
       .from("deals")
       .select(dealColumns)
       .order("created_at", { ascending: false })
-      .limit(200), tenant);
+      .limit(160), tenant);
   }
 
   if (
@@ -224,8 +224,8 @@ export async function getCrmData(): Promise<CrmData> {
     messagesResult = await applyTenantFilter(supabase
       .from("messages")
       .select("id,contact_id,direction,body,status,created_at")
-      .order("created_at", { ascending: true })
-      .limit(500), tenant);
+      .order("created_at", { ascending: false })
+      .limit(260), tenant);
   }
 
   const serviceOrdersMissing = Boolean(
@@ -296,19 +296,21 @@ export async function getCrmData(): Promise<CrmData> {
     };
   });
 
-  const messages: Message[] = (messagesResult.data || []).map((message: any) => ({
-    id: message.id,
-    contactId: message.contact_id,
-    direction: message.direction,
-    body: message.body,
-    status: message.status || "queued",
-    providerMessageId: message.provider_message_id || undefined,
-    type: message.type || "text",
-    mediaUrl: extractMediaUrl(message.raw_payload),
-    fileName: extractFileName(message.raw_payload),
-    rawPayload: message.raw_payload || undefined,
-    createdAt: message.created_at || new Date().toISOString(),
-  }));
+  const messages: Message[] = (messagesResult.data || [])
+    .map((message: any) => ({
+      id: message.id,
+      contactId: message.contact_id,
+      direction: message.direction,
+      body: message.body,
+      status: message.status || "queued",
+      providerMessageId: message.provider_message_id || undefined,
+      type: message.type || "text",
+      mediaUrl: extractMediaUrl(message.raw_payload),
+      fileName: extractFileName(message.raw_payload),
+      rawPayload: message.raw_payload || undefined,
+      createdAt: message.created_at || new Date().toISOString(),
+    }))
+    .sort((a: Message, b: Message) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const activities: Activity[] = (activitiesResult.data || []).map((activity: any) => ({
     id: activity.id,

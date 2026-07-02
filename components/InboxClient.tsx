@@ -377,6 +377,7 @@ export function InboxClient({
   const audioChunksRef = useRef<Blob[]>([]);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const router = useRouter();
+  const refreshingRef = useRef(false);
 
   const selected = contacts.find((contact) => contact.id === selectedId);
   const selectedDeal = useMemo(() => {
@@ -437,6 +438,9 @@ export function InboxClient({
         return new Date(lastB).getTime() - new Date(lastA).getTime();
       });
   }, [contacts, latestMessageByContact]);
+
+  const visibleContacts = useMemo(() => orderedContacts.slice(0, 80), [orderedContacts]);
+  const visibleThreadMessages = useMemo(() => threadMessages.slice(-90), [threadMessages]);
 
   const quickReplies = useMemo(() => {
     const name = firstName(selected?.name);
@@ -499,10 +503,12 @@ export function InboxClient({
       });
     });
 
-    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 12);
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
   }, [contactActivities, selectedDeal, selectedServiceOrders, selectedStage?.title, threadMessages]);
 
   async function refreshInboxData() {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
     try {
       const response = await fetch("/api/inbox", { cache: "no-store" });
       const result = await response.json().catch(() => ({}));
@@ -531,6 +537,8 @@ export function InboxClient({
       setLastSyncAt(new Date().toISOString());
     } catch {
       // Polling é complementar; se falhar, mantém a tela atual.
+    } finally {
+      refreshingRef.current = false;
     }
   }
 
@@ -548,7 +556,7 @@ export function InboxClient({
   useEffect(() => {
     const missing = contacts
       .filter((contact) => !avatarUrls[contact.id] && contact.phone)
-      .slice(0, 12);
+      .slice(0, 5);
 
     if (!missing.length) return;
 
@@ -586,7 +594,7 @@ export function InboxClient({
 
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") refreshInboxData();
-    }, 4500);
+    }, 12000);
 
     window.addEventListener("focus", refreshOnReturn);
     document.addEventListener("visibilitychange", refreshOnVisible);
@@ -629,7 +637,7 @@ export function InboxClient({
   }, [selected?.id, threadMessages.length]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   }, [selectedId, threadMessages.length]);
 
   useEffect(() => {
@@ -1382,7 +1390,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
         </div>
 
         <div className="thread-stack whatsapp-thread-stack">
-          {orderedContacts.map((contact) => {
+          {visibleContacts.map((contact) => {
             const latest = latestMessageByContact.get(contact.id);
             const waitingReply = hasUnreadInbound(contact.id);
             const avatarUrl = avatarUrls[contact.id] || contact.avatarUrl;
@@ -1466,7 +1474,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
               <p className="muted">Nenhuma mensagem ainda. Envie a primeira mensagem para testar o fluxo.</p>
             </div>
           )}
-          {threadMessages.map((message) => {
+          {visibleThreadMessages.map((message) => {
             const isResolving = Boolean(resolvingMediaIds[message.id]);
             const fileName = message.fileName || message.body.replace(/^\[(arquivo|documento|áudio|audio|imagem|vídeo|video)\]\s*/i, "") || "mídia";
             return (

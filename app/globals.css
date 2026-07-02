@@ -8946,3 +8946,90 @@ button:disabled {
     transition-duration: .01ms !important;
   }
 }
+
+
+/* NextLead CRM — v13.8: limpeza de performance sem mudar regra de negócio */
+:root {
+  --perf-transition-fast: .08s;
+}
+
+/* Elementos longos só pintam quando entram perto da viewport. Ajuda em histórico, kanban e listas grandes. */
+.thread-pro,
+.whatsapp-bubble,
+.timeline-item,
+.crm-contact-row,
+.inbox-order-card,
+.stage-lean .deal-card,
+.dashboard-v2-row,
+.service-order-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 88px;
+}
+
+/* Reduz custo de blur em superfícies de rolagem; mantém estética high-tech via transparência/borda. */
+.inbox-pro,
+.chat-pro,
+.messages-pro,
+.thread-list-pro,
+.lead-inspector,
+.inspector-scroll-area,
+.inspector-content-card,
+.smart-select-menu,
+.smart-select-menu-portal,
+.dashboard-v2-card,
+.dashboard-v2-metric,
+.crm-card,
+.setup-card,
+.service-orders-panel {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Sombras menores evitam repintura pesada em notebooks e monitores externos. */
+.inbox-pro,
+.lead-inspector,
+.dashboard-v2-card,
+.dashboard-v2-metric,
+.crm-card,
+.service-orders-panel,
+.smart-select-menu,
+.smart-select-menu-portal {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .24) !important;
+}
+
+/* Menos animação em componentes acionados o tempo todo. */
+.btn,
+.smart-select-trigger,
+.smart-select-menu button,
+.thread-pro,
+.whatsapp-bubble,
+.crm-contact-row,
+.stage-lean,
+.inspector-tabs button,
+.lead-panel-trigger {
+  transition-duration: var(--perf-transition-fast) !important;
+}
+
+/* Composer e painel continuam responsivos, mas sem forçar repaints horizontais. */
+.messages-pro,
+.inspector-scroll-area,
+.lead-inspector {
+  will-change: scroll-position;
+  overflow-anchor: auto;
+}
+
+/* Em telas menores, simplifica ainda mais efeitos que costumam pesar no Chrome/Edge. */
+@media (max-width: 1366px) {
+  .inbox-pro,
+  .chat-pro,
+  .thread-list-pro,
+  .lead-inspector,
+  .dashboard-v2-card,
+  .crm-card {
+    background-image: none !important;
+  }
+
+  .whatsapp-bubble.outbound {
+    box-shadow: 0 10px 24px rgba(37, 99, 235, .18) !important;
+  }
+}
