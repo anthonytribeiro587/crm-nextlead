@@ -142,6 +142,43 @@ function normalizeMessages(payload: any): any[] {
   return [];
 }
 
+
+function isInboundMessageEvent(event: string) {
+  const compact = String(event || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  return (
+    compact.includes("messagesupsert") ||
+    compact.includes("messageupsert") ||
+    compact.includes("messagesset") ||
+    compact.includes("messagescreate") ||
+    compact.includes("messagecreate") ||
+    compact.includes("sendmessage")
+  );
+}
+
+function hasMessageContent(item: any) {
+  const msg = item?.message || item?.data?.message || item?.update?.message;
+  if (!msg) return false;
+  return Boolean(
+    msg?.conversation ||
+      msg?.extendedTextMessage ||
+      msg?.imageMessage ||
+      msg?.videoMessage ||
+      msg?.audioMessage ||
+      msg?.documentMessage ||
+      msg?.stickerMessage ||
+      msg?.reactionMessage ||
+      msg?.buttonsResponseMessage ||
+      msg?.templateButtonReplyMessage ||
+      msg?.listResponseMessage
+  );
+}
+
+function isProbablyStatusOnlyItem(item: any) {
+  return extractRawStatus(item) !== undefined && !hasMessageContent(item);
+}
+
 function isMessageStatusUpdateEvent(event: string) {
   const compact = String(event || "")
     .toLowerCase()
@@ -484,9 +521,10 @@ export async function persistEvolutionWebhook(payload: any) {
 
   const event = String(payload?.event || "").toLowerCase();
   const candidates = normalizeMessages(payload);
+  const inboundMessageEvent = isInboundMessageEvent(event);
   const looksLikeStatusUpdate = candidates.some(
     (item) =>
-      extractRawStatus(item) !== undefined &&
+      isProbablyStatusOnlyItem(item) &&
       Boolean(
         extractUpdateMessageId(item) ||
         phoneFromKey(
@@ -500,7 +538,11 @@ export async function persistEvolutionWebhook(payload: any) {
       ),
   );
 
-  if (isMessageStatusUpdateEvent(event) || looksLikeStatusUpdate) {
+  // Importante: alguns payloads de MESSAGES_UPSERT da Evolution vêm com
+  // campos como status/ack mesmo quando são mensagens recebidas.
+  // Se tratarmos isso como update de status, a resposta do lead nunca entra no Inbox.
+  // Por isso, eventos explícitos de mensagem sempre seguem para persistência de mensagem.
+  if (!inboundMessageEvent && (isMessageStatusUpdateEvent(event) || looksLikeStatusUpdate)) {
     const updates = candidates;
     let statusUpdates = 0;
 
@@ -509,7 +551,7 @@ export async function persistEvolutionWebhook(payload: any) {
       if (updated) statusUpdates += 1;
     }
 
-    return { persisted: true, messages: 0, statusUpdates };
+    return { persisted: true, messages: 0, statusUpdates, statusOnly: true };
   }
 
   const messages = normalizeMessages(payload);
