@@ -8701,3 +8701,106 @@ button:disabled {
   position: relative;
   z-index: 1;
 }
+
+/* NextLead CRM — v13.5: painel do lead responsivo e OS sem vazamento lateral */
+.lead-inspector,
+.lead-inspector * {
+  box-sizing: border-box !important;
+  min-width: 0;
+}
+
+.lead-inspector {
+  overflow: hidden !important;
+}
+
+.lead-inspector .inspector-scroll-area {
+  overflow-x: hidden !important;
+}
+
+.lead-inspector .inspector-card,
+.lead-inspector .inspector-section,
+.lead-inspector .inbox-os-draft,
+.lead-inspector .order-panel-whatsapp,
+.lead-inspector .proposal-panel,
+.lead-inspector .ai-panel {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+.lead-inspector .inbox-os-draft {
+  padding: 14px !important;
+  gap: 12px !important;
+}
+
+.lead-inspector .form-grid,
+.lead-inspector .compact-grid,
+.lead-inspector .inbox-os-draft .form-grid,
+.lead-inspector .inbox-os-draft .compact-grid {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 12px !important;
+  width: 100% !important;
+}
+
+.lead-inspector .form-row,
+.lead-inspector .action-field {
+  display: grid !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 7px !important;
+}
+
+.lead-inspector .input,
+.lead-inspector input,
+.lead-inspector textarea,
+.lead-inspector select,
+.lead-inspector .smart-select,
+.lead-inspector .smart-select-trigger,
+.lead-inspector .mini-smart-select {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.lead-inspector textarea.input,
+.lead-inspector .inbox-os-draft textarea {
+  min-height: 96px !important;
+  line-height: 1.4 !important;
+}
+
+.lead-inspector .inspector-actions {
+  width: 100% !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.lead-inspector .inspector-actions .btn {
+  width: 100% !important;
+  white-space: nowrap !important;
+}
+
+.lead-inspector .inspector-tabs {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  overscroll-behavior-x: contain;
+}
+
+.lead-inspector .inspector-tabs button {
+  min-width: 94px !important;
+}
+
+@media (min-width: 1580px) {
+  .lead-inspector {
+    width: min(560px, calc(100vw - 34px)) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .lead-inspector .inspector-actions {
+    grid-template-columns: 1fr !important;
+  }
+  .lead-inspector .inspector-tabs button {
+    min-width: 86px !important;
+  }
+}
