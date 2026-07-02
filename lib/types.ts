@@ -97,3 +97,16 @@ export interface ServiceOrder {
   createdAt: string;
   updatedAt: string;
 }
+
+
+export interface TenantBranding {
+  id: string;
+  slug: string;
+  name: string;
+  appName: string;
+  tagline: string;
+  logoUrl: string;
+  markUrl: string;
+  primaryColor: string;
+  secondaryColor: string;
+}

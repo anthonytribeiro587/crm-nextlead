@@ -1,3 +1,6 @@
+import type { TenantContext } from "./tenant";
+import { withTenant } from "./tenant";
+
 export const INITIAL_ACTIVITY_TITLES = ["Abordar lead quente agora", "Fazer primeiro contato"];
 
 type SupabaseClientLike = {
@@ -19,8 +22,9 @@ export async function upsertInitialContactActivity(input: {
   supabase: SupabaseClientLike;
   contactId: string;
   temperature?: string;
+  tenant?: TenantContext;
 }) {
-  const { supabase, contactId, temperature } = input;
+  const { supabase, contactId, temperature, tenant } = input;
   const isHot = temperature === "quente";
   const title = isHot ? "Abordar lead quente agora" : "Fazer primeiro contato";
   const dueAt = new Date(Date.now() + 1000 * 60 * 60 * (isHot ? 1 : 2)).toISOString();
@@ -44,7 +48,7 @@ export async function upsertInitialContactActivity(input: {
 
   const { data } = await supabase
     .from("activities")
-    .insert({ contact_id: contactId, title, due_at: dueAt })
+    .insert(withTenant({ contact_id: contactId, title, due_at: dueAt }, tenant || ({ tenantTableReady: false } as TenantContext)))
     .select("id")
     .single();
 

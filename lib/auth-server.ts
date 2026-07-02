@@ -1,11 +1,14 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
+import { DEFAULT_TENANT_ID, DEFAULT_TENANT_SLUG } from "./tenant";
 
 export const SESSION_COOKIE = "nextlead_session";
 
 export type SessionUser = {
   name: "Anthony" | "Felipe";
   role: "admin" | "vendas";
+  tenantId: string;
+  tenantSlug: string;
   exp: number;
 };
 
@@ -31,6 +34,8 @@ function safeEqual(a: string, b: string) {
 export function createSessionToken(user: Omit<SessionUser, "exp">) {
   const payload: SessionUser = {
     ...user,
+    tenantId: user.tenantId || DEFAULT_TENANT_ID,
+    tenantSlug: user.tenantSlug || DEFAULT_TENANT_SLUG,
     exp: Date.now() + 1000 * 60 * 60 * 24 * 7,
   };
   const payloadBase64 = base64Url(JSON.stringify(payload));
@@ -49,7 +54,7 @@ export function verifySessionToken(token?: string | null): SessionUser | null {
   try {
     const payload = JSON.parse(Buffer.from(payloadBase64, "base64url").toString("utf8")) as SessionUser;
     if (!payload?.name || !payload.exp || payload.exp < Date.now()) return null;
-    return payload;
+    return { ...payload, tenantId: payload.tenantId || DEFAULT_TENANT_ID, tenantSlug: payload.tenantSlug || DEFAULT_TENANT_SLUG };
   } catch {
     return null;
   }
@@ -65,11 +70,11 @@ export function validateLogin(user: string, password: string) {
   const felipePassword = process.env.NEXTLEAD_FELIPE_PASSWORD || "";
 
   if (["anthony", "miguel", "miguelito"].includes(normalized) && Boolean(anthonyPassword) && password === anthonyPassword) {
-    return { name: "Anthony" as const, role: "admin" as const };
+    return { name: "Anthony" as const, role: "admin" as const, tenantId: DEFAULT_TENANT_ID, tenantSlug: DEFAULT_TENANT_SLUG };
   }
 
   if (normalized === "felipe" && Boolean(felipePassword) && password === felipePassword) {
-    return { name: "Felipe" as const, role: "vendas" as const };
+    return { name: "Felipe" as const, role: "vendas" as const, tenantId: DEFAULT_TENANT_ID, tenantSlug: DEFAULT_TENANT_SLUG };
   }
 
   return null;

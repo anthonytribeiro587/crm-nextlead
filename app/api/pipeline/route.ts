@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { PIPELINE_TEMPLATES, type PipelineTemplateKey } from "@/lib/pipeline-templates";
+import { getTenantContext, withTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -48,9 +49,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, demo: true, pipeline, stages });
   }
 
+  const tenant = await getTenantContext(request.headers.get("host"));
+
   const { data: pipeline, error: pipelineError } = await supabase
     .from("pipelines")
-    .insert({ name })
+    .insert(withTenant({ name }, tenant))
     .select("id,name,created_at")
     .single();
 
@@ -58,12 +61,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: pipelineError?.message || "Erro ao criar pipeline." }, { status: 500 });
   }
 
-  const stageRows = selectedStages.map((stage, index) => ({
-    pipeline_id: pipeline.id,
-    title: stage.title,
-    position: index + 1,
-    color: stage.color,
-  }));
+  const stageRows = selectedStages.map((stage, index) =>
+    withTenant({
+      pipeline_id: pipeline.id,
+      title: stage.title,
+      position: index + 1,
+      color: stage.color,
+    }, tenant),
+  );
 
   const { data: createdStages, error: stagesError } = await supabase
     .from("pipeline_stages")

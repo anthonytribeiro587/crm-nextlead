@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { TenantContext } from "./tenant";
+import { withTenant } from "./tenant";
 
 export const DEFAULT_PIPELINE_ID =
   process.env.NEXT_PUBLIC_DEFAULT_PIPELINE_ID || "00000000-0000-0000-0000-000000000001";
@@ -12,17 +14,40 @@ export const DEFAULT_STAGES = [
   { id: "00000000-0000-0000-0000-000000000106", title: "Fechado", position: 6, color: "#22c55e" },
 ];
 
-export async function ensureDefaultPipeline(supabase: SupabaseClient) {
-  await supabase
-    .from("pipelines")
-    .upsert({ id: DEFAULT_PIPELINE_ID, name: "Comercial NextLead" }, { onConflict: "id" });
+export async function ensureDefaultPipeline(supabase: SupabaseClient, tenant?: TenantContext) {
+  const pipelineId = tenant?.isDefault ? DEFAULT_PIPELINE_ID : undefined;
+  const pipelineRecord = withTenant(
+    { ...(pipelineId ? { id: pipelineId } : {}), name: tenant?.isDefault ? "Comercial NextLead" : `Comercial ${tenant?.name || "NextLead"}` },
+    tenant || ({ tenantTableReady: false } as TenantContext),
+  );
+
+  await supabase.from("pipelines").upsert(pipelineRecord, { onConflict: pipelineId ? "id" : "tenant_id,name" });
+
+  let pipelineQuery = supabase.from("pipelines").select("id").eq("name", pipelineRecord.name);
+  if (tenant?.tenantTableReady) pipelineQuery = pipelineQuery.eq("tenant_id", tenant.id);
+  const { data: pipeline } = await pipelineQuery.maybeSingle();
+
+  const resolvedPipelineId = pipeline?.id || pipelineId || DEFAULT_PIPELINE_ID;
 
   await supabase
     .from("pipeline_stages")
     .upsert(
-      DEFAULT_STAGES.map((stage) => ({ ...stage, pipeline_id: DEFAULT_PIPELINE_ID })),
-      { onConflict: "id" }
+      DEFAULT_STAGES.map((stage) =>
+        withTenant(
+          { ...(tenant?.isDefault ? { id: stage.id } : {}), title: stage.title, position: stage.position, color: stage.color, pipeline_id: resolvedPipelineId },
+          tenant || ({ tenantTableReady: false } as TenantContext),
+        ),
+      ),
+      { onConflict: tenant?.isDefault ? "id" : "tenant_id,pipeline_id,position" },
     );
 
-  return DEFAULT_STAGES[0].id;
+  let firstStageQuery = supabase
+    .from("pipeline_stages")
+    .select("id")
+    .eq("pipeline_id", resolvedPipelineId)
+    .eq("position", 1);
+  if (tenant?.tenantTableReady) firstStageQuery = firstStageQuery.eq("tenant_id", tenant.id);
+  const { data: firstStage } = await firstStageQuery.maybeSingle();
+
+  return firstStage?.id || DEFAULT_STAGES[0].id;
 }

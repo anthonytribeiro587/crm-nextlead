@@ -1,6 +1,7 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { ensureDefaultPipeline } from "./default-pipeline";
+import { applyTenantFilter, getTenantContext } from "./tenant";
 import {
   activities as mockActivities,
   contacts as mockContacts,
@@ -144,34 +145,35 @@ export async function getCrmData(): Promise<CrmData> {
   const supabase = getSupabaseAdmin();
   if (!supabase) return fallbackData("Variáveis do Supabase ausentes na Vercel.");
 
-  await ensureDefaultPipeline(supabase);
+  const tenant = await getTenantContext();
+  await ensureDefaultPipeline(supabase, tenant);
 
-  const pipelinesPromise = supabase.from("pipelines").select("id,name,created_at").order("created_at", { ascending: true });
-  const stagesPromise = supabase.from("pipeline_stages").select("id,pipeline_id,title,position,color").order("position", { ascending: true });
-  const dealsPromise = supabase.from("deals").select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at").order("created_at", { ascending: false }).limit(200);
-  let messagesPromise: any = supabase.from("messages").select("id,contact_id,direction,body,type,status,provider_message_id,raw_payload,created_at").order("created_at", { ascending: true }).limit(500);
-  const activitiesPromise = supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(300);
-  const serviceOrdersPromise = supabase
+  const pipelinesPromise = applyTenantFilter(supabase.from("pipelines").select("id,name,created_at").order("created_at", { ascending: true }), tenant);
+  const stagesPromise = applyTenantFilter(supabase.from("pipeline_stages").select("id,pipeline_id,title,position,color").order("position", { ascending: true }), tenant);
+  const dealsPromise = applyTenantFilter(supabase.from("deals").select("id,contact_id,pipeline_id,stage_id,title,value,status,expected_close,lost_reason,created_at").order("created_at", { ascending: false }).limit(200), tenant);
+  let messagesPromise: any = applyTenantFilter(supabase.from("messages").select("id,contact_id,direction,body,type,status,provider_message_id,raw_payload,created_at").order("created_at", { ascending: true }).limit(500), tenant);
+  const activitiesPromise = applyTenantFilter(supabase.from("activities").select("id,contact_id,title,due_at,done").order("due_at", { ascending: true }).limit(300), tenant);
+  const serviceOrdersPromise = applyTenantFilter(supabase
     .from("service_orders")
     .select("id,contact_id,deal_id,code,title,description,status,priority,owner,estimated_value,final_value,due_at,started_at,completed_at,internal_notes,created_at,updated_at")
     .order("created_at", { ascending: false })
-    .limit(300);
+    .limit(300), tenant);
 
   // Tipamos como any porque fazemos fallback de select com/sem a coluna owner.
-  let contactsResult: any = await supabase
+  let contactsResult: any = await applyTenantFilter(supabase
     .from("contacts")
     .select("id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at,created_at")
     .order("created_at", { ascending: false })
-    .limit(300);
+    .limit(300), tenant);
 
   let hasOwnerColumn = true;
   if (contactsResult.error?.message.toLowerCase().includes("owner")) {
     hasOwnerColumn = false;
-    contactsResult = await supabase
+    contactsResult = await applyTenantFilter(supabase
       .from("contacts")
       .select("id,name,phone,email,company,source,temperature,tags,notes,last_message_at,created_at")
       .order("created_at", { ascending: false })
-      .limit(300);
+      .limit(300), tenant);
   }
 
   let [pipelinesResult, stagesResult, dealsResult, messagesResult, activitiesResult, serviceOrdersResult]: any[] = await Promise.all([
@@ -184,15 +186,15 @@ export async function getCrmData(): Promise<CrmData> {
   ]);
 
   if (pipelinesResult.error?.message?.toLowerCase().includes("created_at")) {
-    pipelinesResult = await supabase.from("pipelines").select("id,name").order("name", { ascending: true });
+    pipelinesResult = await applyTenantFilter(supabase.from("pipelines").select("id,name").order("name", { ascending: true }), tenant);
   }
 
   if (dealsResult.error?.message?.toLowerCase().includes("pipeline_id")) {
-    dealsResult = await supabase
+    dealsResult = await applyTenantFilter(supabase
       .from("deals")
       .select("id,contact_id,stage_id,title,value,status,expected_close,lost_reason,created_at")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(200), tenant);
   }
 
   if (
@@ -200,11 +202,11 @@ export async function getCrmData(): Promise<CrmData> {
     messagesResult.error?.message?.toLowerCase().includes("provider_message_id") ||
     messagesResult.error?.message?.toLowerCase().includes("type")
   ) {
-    messagesResult = await supabase
+    messagesResult = await applyTenantFilter(supabase
       .from("messages")
       .select("id,contact_id,direction,body,status,created_at")
       .order("created_at", { ascending: true })
-      .limit(500);
+      .limit(500), tenant);
   }
 
   const serviceOrdersMissing = Boolean(

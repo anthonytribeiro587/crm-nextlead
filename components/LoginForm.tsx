@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export function LoginForm() {
+export function LoginForm({ branding }: { branding?: { appName: string; tagline: string; logoUrl: string } }) {
   const [user, setUser] = useState("Anthony");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export function LoginForm() {
     <div className="login-shell-pro">
       <section className="login-pitch-panel">
         <div className="login-logo login-logo-pro">
-          <img src="/nextlead-logo.png" alt="NextLead" />
+          <img src={branding?.logoUrl || "/nextlead-logo.png"} alt={branding?.appName || "NextLead"} />
         </div>
         <p className="eyebrow">CRM próprio</p>
         <h1>Atendimento, funil e WhatsApp em um só lugar.</h1>
@@ -59,7 +59,7 @@ export function LoginForm() {
         <div>
           <p className="eyebrow">Acesso protegido</p>
           <h2>Entrar no CRM</h2>
-          <p className="description">Use seu usuário da NextLead para continuar.</p>
+          <p className="description">Use seu usuário para continuar em {branding?.appName || "NextLead CRM"}.</p>
         </div>
 
         <label className="form-row">

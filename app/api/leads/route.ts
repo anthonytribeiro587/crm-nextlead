@@ -4,6 +4,7 @@ import { brazilPhoneVariants, normalizeBrazilWhatsAppPhone } from "@/lib/format"
 import { ensureDefaultPipeline } from "@/lib/default-pipeline";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth-server";
 import { upsertInitialContactActivity } from "@/lib/activities";
+import { applyTenantFilter, getTenantContext, withTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -123,9 +124,10 @@ export async function POST(request: NextRequest) {
     return json(request, { ok: true, demo: true, message: "Lead recebido. Configure Supabase para salvar." });
   }
 
-  const firstStageId = await ensureDefaultPipeline(supabase);
+  const tenant = await getTenantContext(request.headers.get("host"));
+  const firstStageId = await ensureDefaultPipeline(supabase, tenant);
 
-  const contactPayload: Record<string, any> = {
+  const contactPayload: Record<string, any> = withTenant({
     name,
     phone,
     email: email || null,
@@ -136,16 +138,16 @@ export async function POST(request: NextRequest) {
     notes: notes || null,
     last_message_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  };
+  }, tenant);
 
   const contactPayloadWithOwner = { ...contactPayload, owner };
 
   const variants = brazilPhoneVariants(phone);
-  const { data: possibleContacts } = await supabase
+  const { data: possibleContacts } = await applyTenantFilter(supabase
     .from("contacts")
     .select("id,phone")
     .in("phone", variants.length ? variants : [phone])
-    .limit(10);
+    .limit(10), tenant);
 
   const existingContact =
     possibleContacts?.find((item: any) => item.phone === phone) ||
@@ -184,14 +186,14 @@ export async function POST(request: NextRequest) {
   } else {
     contactResult = await supabase
       .from("contacts")
-      .upsert(contactPayloadWithOwner, { onConflict: "phone" })
+      .upsert(contactPayloadWithOwner, { onConflict: tenant.tenantTableReady ? "tenant_id,phone" : "phone" })
       .select("id")
       .single();
 
     if (contactResult.error?.message.toLowerCase().includes("owner")) {
       contactResult = await supabase
         .from("contacts")
-        .upsert(contactPayload, { onConflict: "phone" })
+        .upsert(contactPayload, { onConflict: tenant.tenantTableReady ? "tenant_id,phone" : "phone" })
         .select("id")
         .single();
     }
@@ -204,14 +206,14 @@ export async function POST(request: NextRequest) {
     return json(request, { error: contactError?.message || "Erro ao salvar contato." }, { status: 500 });
   }
 
-  const { data: existingDeal } = await supabase
+  const { data: existingDeal } = await applyTenantFilter(supabase
     .from("deals")
     .select("id")
     .eq("contact_id", contact.id)
     .eq("status", "aberto")
     .order("created_at", { ascending: false })
     .limit(1)
-    .maybeSingle();
+    .maybeSingle(), tenant);
 
   let dealId = existingDeal?.id || null;
 
@@ -239,11 +241,11 @@ export async function POST(request: NextRequest) {
   } else {
     const { data: deal, error: dealError } = await supabase
       .from("deals")
-      .insert({
+      .insert(withTenant({
         ...dealPayload,
         contact_id: contact.id,
         stage_id: firstStageId,
-      })
+      }, tenant))
       .select("id")
       .single();
 
@@ -254,7 +256,7 @@ export async function POST(request: NextRequest) {
     dealId = deal.id;
   }
 
-  await upsertInitialContactActivity({ supabase, contactId: contact.id, temperature });
+  await upsertInitialContactActivity({ supabase, contactId: contact.id, temperature, tenant });
 
   return json(request, { ok: true, contactId: contact.id, dealId });
 }

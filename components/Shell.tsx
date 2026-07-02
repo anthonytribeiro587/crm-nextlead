@@ -13,7 +13,15 @@ const nav = [
   { href: "/configuracoes", label: "Setup", icon: Settings },
 ];
 
-export function Shell({ children, currentUser }: { children: React.ReactNode; currentUser?: string }) {
+export function Shell({
+  children,
+  currentUser,
+  branding,
+}: {
+  children: React.ReactNode;
+  currentUser?: string;
+  branding?: { appName: string; tagline: string; markUrl: string };
+}) {
   const pathname = usePathname();
 
   if (pathname === "/login") {
@@ -28,13 +36,13 @@ export function Shell({ children, currentUser }: { children: React.ReactNode; cu
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <Link className="brand" href="/" aria-label="NextLead CRM">
+        <Link className="brand" href="/" aria-label={branding?.appName || "NextLead CRM"}>
           <span className="brand-mark-img">
-            <img src="/nextlead-mark.png" alt="" />
+            <img src={branding?.markUrl || "/nextlead-mark.png"} alt="" />
           </span>
           <span className="brand-copy">
-            <strong>NextLead CRM</strong>
-            <small>Páginas que convertem</small>
+            <strong>{branding?.appName || "NextLead CRM"}</strong>
+            <small>{branding?.tagline || "Páginas que convertem"}</small>
           </span>
         </Link>
 

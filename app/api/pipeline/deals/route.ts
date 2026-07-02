@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { completeInitialContactActivities } from "@/lib/activities";
 import { logCommercialActivity } from "@/lib/commercial-events";
+import { applyTenantFilter, getTenantContext, withTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -51,20 +52,21 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  const tenant = await getTenantContext(request.headers.get("host"));
   const value = parseMoney(payload.value) || 0;
   const expectedClose = cleanDate(payload.expectedClose ?? payload.expected_close);
 
-  const { data: stage, error: stageError } = await supabase
+  const { data: stage, error: stageError } = await applyTenantFilter(supabase
     .from("pipeline_stages")
     .select("id,pipeline_id,title")
     .eq("id", stageId)
-    .maybeSingle();
+    .maybeSingle(), tenant);
 
   if (stageError || !stage) {
     return NextResponse.json({ error: "Etapa inválida ou inexistente." }, { status: 400 });
   }
 
-  const insert: Record<string, any> = {
+  const insert: Record<string, any> = withTenant({
     contact_id: contactId,
     pipeline_id: stage.pipeline_id,
     stage_id: stageId,
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest) {
     status: "aberto",
     source: "Funil",
     updated_at: new Date().toISOString(),
-  };
+  }, tenant);
   if (expectedClose) insert.expected_close = expectedClose;
 
   const { data: deal, error } = await supabase
@@ -86,7 +88,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  await logCommercialActivity(supabase, { contactId, title: `Oportunidade criada: ${title}`, done: true });
+  await logCommercialActivity(supabase, { contactId, title: `Oportunidade criada: ${title}`, done: true, tenant });
 
   return NextResponse.json({
     ok: true,
@@ -118,14 +120,15 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, demo: true });
   }
 
+  const tenant = await getTenantContext(request.headers.get("host"));
   let selectedStage: { id: string; pipeline_id?: string; title?: string } | null = null;
 
   if (stageId) {
-    const { data: stage, error: stageError } = await supabase
+    const { data: stage, error: stageError } = await applyTenantFilter(supabase
       .from("pipeline_stages")
       .select("id,pipeline_id,title")
       .eq("id", stageId)
-      .maybeSingle();
+      .maybeSingle(), tenant);
 
     if (stageError || !stage) {
       return NextResponse.json({ error: "Etapa inválida ou inexistente." }, { status: 400 });
@@ -152,10 +155,10 @@ export async function PATCH(request: NextRequest) {
   const expectedClose = cleanDate(payload.expectedClose ?? payload.expectedCloseDate ?? payload.expected_close);
   if (expectedClose !== undefined) update.expected_close = expectedClose;
 
-  const { data: deal, error } = await supabase
+  const { data: deal, error } = await applyTenantFilter(supabase
     .from("deals")
     .update(update)
-    .eq("id", dealId)
+    .eq("id", dealId), tenant)
     .select("id,contact_id,pipeline_id,title,value,status,stage_id,expected_close,lost_reason,created_at")
     .single();
 
@@ -177,7 +180,7 @@ export async function PATCH(request: NextRequest) {
       eventTitle = "Oportunidade editada";
     }
 
-    await logCommercialActivity(supabase, { contactId: deal.contact_id, title: eventTitle, done: true });
+    await logCommercialActivity(supabase, { contactId: deal.contact_id, title: eventTitle, done: true, tenant });
   }
 
   return NextResponse.json({
