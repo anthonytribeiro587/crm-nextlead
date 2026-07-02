@@ -8632,3 +8632,59 @@ button:disabled {
   .crm-timeline-head { display: grid; }
   .crm-timeline-head .btn { width: 100%; }
 }
+
+/* NextLead CRM — v13.0 hotfix: portal dropdown alinhado ao campo e dashboard sem buraco */
+.smart-select-menu-portal {
+  position: fixed !important;
+  top: var(--smart-menu-top) !important;
+  left: var(--smart-menu-left) !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: var(--smart-menu-width) !important;
+  max-height: var(--smart-menu-max-height) !important;
+  transform: none !important;
+  z-index: 2147483000 !important;
+}
+
+.dash-board-clean {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+  margin-bottom: 14px !important;
+}
+.dash-board-clean .dash-side-column {
+  display: contents !important;
+}
+.dash-board-clean .dash-main-card,
+.dash-board-clean .dash-small-card {
+  min-height: 178px !important;
+  height: 100% !important;
+}
+.dash-board-clean .dash-task-list,
+.dash-board-clean .dash-mini-list {
+  min-height: 74px !important;
+}
+.dash-board-clean .dash-empty,
+.dash-board-clean .dash-empty.mini {
+  min-height: 68px !important;
+}
+
+@media (max-width: 1280px) {
+  .dash-board-clean {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .dash-board-clean .dash-main-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 820px) {
+  .dash-board-clean {
+    grid-template-columns: 1fr !important;
+  }
+  .dash-board-clean .dash-main-card,
+  .dash-board-clean .dash-small-card {
+    min-height: 0 !important;
+  }
+}

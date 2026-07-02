@@ -110,10 +110,10 @@ export function SmartSelect({
           data-smart-select-menu={listboxId}
           style={
             {
-              top: `${menuPosition.top}px`,
-              left: `${menuPosition.left}px`,
-              width: `${menuPosition.width}px`,
-              maxHeight: `${menuPosition.maxHeight}px`,
+              "--smart-menu-top": `${menuPosition.top}px`,
+              "--smart-menu-left": `${menuPosition.left}px`,
+              "--smart-menu-width": `${menuPosition.width}px`,
+              "--smart-menu-max-height": `${menuPosition.maxHeight}px`,
             } as CSSProperties
           }
         >
