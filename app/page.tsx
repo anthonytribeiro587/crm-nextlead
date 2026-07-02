@@ -109,15 +109,15 @@ export default async function DashboardPage() {
     <>
       <section className="dash-command card">
         <div>
-          <p className="eyebrow">Painel comercial</p>
-          <h1>Comando da operação.</h1>
-          <p className="description">Priorize respostas, follow-ups, propostas e ordens sem ocupar a tela com blocos vazios.</p>
+          <p className="eyebrow">Visão geral</p>
+          <h1>Bom dia, Anthony.</h1>
+          <p className="description">Veja o que precisa de atenção agora: conversas, follow-ups, propostas e serviços.</p>
         </div>
         <div className="dash-command-actions">
           <span className={`system-status ${isDemo ? "demo" : "online"}`}>{isDemo ? "Modo demo" : "Supabase conectado"}</span>
-          <Link className="btn" href="/inbox">Inbox</Link>
+          <Link className="btn" href="/inbox">Atendimentos</Link>
           <Link className="btn secondary" href="/funil">Funil</Link>
-          <Link className="btn secondary" href="/ordens">OS</Link>
+          <Link className="btn secondary" href="/ordens">Serviços</Link>
         </div>
       </section>
 
@@ -157,7 +157,7 @@ export default async function DashboardPage() {
               <h2>O que fazer agora</h2>
               <p className="muted">Ordem sugerida para o atendimento comercial de hoje.</p>
             </div>
-            <Link className="btn mini secondary" href="/inbox">Abrir Inbox</Link>
+            <Link className="btn mini secondary" href="/inbox">Abrir atendimentos</Link>
           </div>
 
           <div className="dash-task-list">
@@ -211,7 +211,7 @@ export default async function DashboardPage() {
                 <p className="eyebrow-small">Operação</p>
                 <h2>Ordens abertas</h2>
               </div>
-              <Link className="btn mini secondary" href="/ordens">OS</Link>
+              <Link className="btn mini secondary" href="/ordens">Serviços</Link>
             </div>
             <div className="dash-mini-list">
               {!serviceOrdersReady ? (

@@ -11,9 +11,9 @@ export default async function ServiceOrdersPage() {
     <>
       <div className="topbar">
         <div>
-          <p className="eyebrow">Ordens de serviço</p>
-          <h1>Da venda para a execução.</h1>
-          <p className="description">Controle demandas, prazos, responsáveis e status operacional vinculado ao histórico do cliente.</p>
+          <p className="eyebrow">Serviços / OS</p>
+          <h1>Serviços e ordens.</h1>
+          <p className="description">Acompanhe demandas, prazos, responsáveis e execução vinculada ao cliente.</p>
         </div>
       </div>
       <ServiceOrdersClient

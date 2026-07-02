@@ -14,7 +14,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const tenant = await getTenantContext();
 
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" data-theme="light">
       <body
         style={{
           "--primary": tenant.primaryColor,

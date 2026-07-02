@@ -27,9 +27,9 @@ export default function ConfigPage() {
     <>
       <div className="topbar">
         <div>
-          <p className="eyebrow">Setup</p>
-          <h1>Configuração da integração.</h1>
-          <p className="description">CRM protegido, landing pages conectadas e WhatsApp via Evolution API rodando na Oracle.</p>
+          <p className="eyebrow">Configurações</p>
+          <h1>Configurações técnicas.</h1>
+          <p className="description">Área técnica para diagnóstico, rotas úteis e parâmetros do ambiente.</p>
         </div>
       </div>
 

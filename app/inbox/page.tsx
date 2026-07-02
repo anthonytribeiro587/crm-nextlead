@@ -11,9 +11,9 @@ export default async function InboxPage({ searchParams }: { searchParams?: { con
     <>
       <div className="topbar inbox-topbar">
         <div>
-          <p className="eyebrow">WhatsApp Inbox</p>
-          <h1>Atendimento centralizado.</h1>
-          <p className="description">Veja conversas, responda leads e mantenha o histórico conectado ao CRM.</p>
+          <p className="eyebrow">Atendimentos</p>
+          <h1>Atendimentos pelo WhatsApp.</h1>
+          <p className="description">Responda conversas, acompanhe o contexto do lead e avance oportunidades sem sair da tela.</p>
         </div>
         <span className="badge hot">Evolution API conectada</span>
       </div>

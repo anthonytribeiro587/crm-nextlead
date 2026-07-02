@@ -12,12 +12,12 @@ export default async function CrmPage() {
     <>
       <div className="topbar">
         <div>
-          <p className="eyebrow">CRM</p>
-          <h1>Contatos, histórico e origem.</h1>
-          <p className="description">Veja a ficha do cliente, histórico comercial, oportunidades e ordens de serviço vinculadas.</p>
+          <p className="eyebrow">Contatos</p>
+          <h1>Contatos e histórico.</h1>
+          <p className="description">Consulte clientes, origem, oportunidades, conversas e serviços vinculados.</p>
         </div>
         <div className="actions">
-          <Link className="btn secondary" href="/ordens">Ordens</Link>
+          <Link className="btn secondary" href="/ordens">Serviços</Link>
           <Link className="btn" href="/#entrada-lead">Novo contato</Link>
         </div>
       </div>
