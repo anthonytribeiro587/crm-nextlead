@@ -4,6 +4,18 @@ import { brazilPhoneVariants, normalizeBrazilWhatsAppPhone } from "@/lib/format"
 import { getWhatsAppProvider, sendWhatsAppText } from "@/lib/whatsapp";
 import { completeInitialContactActivities } from "@/lib/activities";
 
+function outboundStatusRank(status: string) {
+  const ranks: Record<string, number> = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 99 };
+  return ranks[status] ?? 1;
+}
+
+function bestOutboundStatus(currentStatus: unknown, nextStatus: string) {
+  const current = String(currentStatus || "").trim().toLowerCase();
+  if (nextStatus === "failed") return "failed";
+  if (current === "failed") return current;
+  return outboundStatusRank(current) > outboundStatusRank(nextStatus) ? current : nextStatus;
+}
+
 async function saveOutboundMessage(input: {
   to: string;
   contactId?: string;
@@ -67,7 +79,24 @@ async function saveOutboundMessage(input: {
   };
 
   if (input.providerMessageId) {
-    await supabase.from("messages").upsert(record, { onConflict: "provider_message_id" });
+    const { data: existingMessage } = await supabase
+      .from("messages")
+      .select("id,status")
+      .eq("provider_message_id", input.providerMessageId)
+      .maybeSingle();
+
+    if (existingMessage?.id) {
+      await supabase
+        .from("messages")
+        .update({
+          ...record,
+          status: bestOutboundStatus(existingMessage.status, input.status),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingMessage.id);
+    } else {
+      await supabase.from("messages").insert(record);
+    }
   } else {
     await supabase.from("messages").insert(record);
   }

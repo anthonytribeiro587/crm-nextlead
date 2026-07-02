@@ -41,6 +41,20 @@ function normalizeUiMessageStatus(status: unknown) {
   return map[normalized] || normalized;
 }
 
+function uiMessageStatusRank(status: unknown) {
+  const normalized = normalizeUiMessageStatus(status);
+  const ranks: Record<string, number> = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 99, received: 1 };
+  return ranks[normalized] ?? 1;
+}
+
+function keepBestMessageStatus(currentStatus: unknown, nextStatus: unknown) {
+  const current = normalizeUiMessageStatus(currentStatus);
+  const next = normalizeUiMessageStatus(nextStatus);
+  if (next === "failed") return "failed";
+  if (current === "failed") return current;
+  return uiMessageStatusRank(current) > uiMessageStatusRank(next) ? current : next;
+}
+
 function messageStatusLabel(status: string) {
   const normalized = normalizeUiMessageStatus(status);
   const map: Record<string, string> = {
@@ -367,7 +381,7 @@ export function InboxClient({
   const selectedDeal = useMemo(() => deals.find((deal) => deal.contactId === selected?.id), [deals, selected?.id]);
   const selectedStage = useMemo(() => stages.find((stage) => stage.id === selectedDeal?.stageId), [stages, selectedDeal?.stageId]);
   const pipelineById = useMemo(() => new Map(pipelines.map((pipeline) => [pipeline.id, pipeline])), [pipelines]);
-  const selectedPipelineId = selectedDeal?.pipelineId || selectedStage?.pipelineId || stages[0]?.pipelineId || pipelines[0]?.id || "";
+  const selectedPipelineId = selectedStage?.pipelineId || selectedDeal?.pipelineId || stages[0]?.pipelineId || pipelines[0]?.id || "";
   const selectedPipeline = selectedPipelineId ? pipelineById.get(selectedPipelineId) : undefined;
   const selectedPipelineStages = useMemo(() => {
     if (!selectedPipelineId) return [] as Stage[];
@@ -677,10 +691,17 @@ export function InboxClient({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Erro ao mover oportunidade.");
 
+      const updatedDeal = result.deal || {};
       setDeals((current) =>
         current.map((deal) =>
           deal.id === selectedDeal.id
-            ? { ...deal, pipelineId: stage.pipelineId || deal.pipelineId, stageId: stage.id, status: isClosed ? "ganho" : "aberto", lostReason: undefined }
+            ? {
+                ...deal,
+                pipelineId: updatedDeal.pipelineId || stage.pipelineId || deal.pipelineId,
+                stageId: updatedDeal.stageId || stage.id,
+                status: updatedDeal.status || (isClosed ? "ganho" : "aberto"),
+                lostReason: undefined,
+              }
             : deal,
         ),
       );
@@ -1170,7 +1191,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
       setMessages((current) =>
         current.map((message) =>
           message.id === optimistic.id
-            ? { ...message, status: response.ok ? "sent" : "failed", providerMessageId: result.providerMessageId }
+            ? { ...message, status: response.ok ? keepBestMessageStatus(message.status, "sent") : "failed", providerMessageId: result.providerMessageId }
             : message,
         ),
       );
@@ -1255,7 +1276,7 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
       setMessages((current) =>
         current.map((message) =>
           message.id === optimistic.id
-            ? { ...message, status: response.ok ? "sent" : "failed", providerMessageId: result.providerMessageId }
+            ? { ...message, status: response.ok ? keepBestMessageStatus(message.status, "sent") : "failed", providerMessageId: result.providerMessageId }
             : message,
         ),
       );

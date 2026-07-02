@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
 
   const insert: Record<string, any> = {
     contact_id: contactId,
+    pipeline_id: stage.pipeline_id,
     stage_id: stageId,
     title,
     value,
@@ -134,7 +135,10 @@ export async function PATCH(request: NextRequest) {
   }
 
   const update: Record<string, any> = { updated_at: new Date().toISOString() };
-  if (stageId) update.stage_id = stageId;
+  if (stageId) {
+    update.stage_id = stageId;
+    if (selectedStage?.pipeline_id) update.pipeline_id = selectedStage.pipeline_id;
+  }
   if (status) {
     update.status = status;
     if (status !== "perdido") update.lost_reason = null;

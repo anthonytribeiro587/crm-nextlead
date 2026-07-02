@@ -87,8 +87,15 @@ async function persistMetaWebhook(payload: any) {
           const firstStageId = await ensureDefaultPipeline(supabase);
 
           if (firstStageId) {
+            const { data: firstStage } = await supabase
+              .from("pipeline_stages")
+              .select("pipeline_id")
+              .eq("id", firstStageId)
+              .maybeSingle();
+
             await supabase.from("deals").insert({
               contact_id: contact.id,
+              pipeline_id: firstStage?.pipeline_id || null,
               stage_id: firstStageId,
               title: `Atendimento WhatsApp - ${profileName || from}`,
               status: "aberto",

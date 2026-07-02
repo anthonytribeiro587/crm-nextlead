@@ -259,14 +259,28 @@ async function updateOutboundStatusFromEvolution(
   const providerMessageId = extractUpdateMessageId(update);
 
   if (providerMessageId) {
-    const { data, error } = await supabase
+    const { data: currentMessage } = await supabase
       .from("messages")
-      .update({ status, updated_at: now })
-      .eq("provider_message_id", providerMessageId)
       .select("id,status")
-      .limit(1);
+      .eq("provider_message_id", providerMessageId)
+      .limit(1)
+      .maybeSingle();
 
-    if (!error && data?.length) return true;
+    if (currentMessage?.id) {
+      if (
+        statusRank(String(currentMessage.status || "")) > statusRank(status) &&
+        status !== "failed"
+      ) {
+        return true;
+      }
+
+      const { error } = await supabase
+        .from("messages")
+        .update({ status, updated_at: now })
+        .eq("id", currentMessage.id);
+
+      return !error;
+    }
   }
 
   const key =
@@ -334,8 +348,15 @@ async function ensureDealForContact(
 
   if (!firstStageId) return;
 
+  const { data: firstStage } = await supabase
+    .from("pipeline_stages")
+    .select("pipeline_id")
+    .eq("id", firstStageId)
+    .maybeSingle();
+
   await supabase.from("deals").insert({
     contact_id: contactId,
+    pipeline_id: firstStage?.pipeline_id || null,
     stage_id: firstStageId,
     title,
     status: "aberto",
