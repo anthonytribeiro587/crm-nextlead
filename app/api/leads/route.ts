@@ -4,7 +4,7 @@ import { brazilPhoneVariants, normalizeBrazilWhatsAppPhone } from "@/lib/format"
 import { ensureDefaultPipeline } from "@/lib/default-pipeline";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth-server";
 import { upsertInitialContactActivity } from "@/lib/activities";
-import { applyTenantFilter, getTenantContext, withTenant } from "@/lib/tenant";
+import { DEFAULT_TENANT_ID, DEFAULT_TENANT_SLUG, applyTenantFilter, getTenantContext, withTenant, type TenantContext } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -58,7 +58,7 @@ function corsHeaders(request: NextRequest) {
   return {
     "Access-Control-Allow-Origin": resolveCorsOrigin(request),
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-NextLead-Key",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-NextLead-Key, X-NextLead-Tenant, X-Tenant-Slug",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
@@ -90,6 +90,89 @@ function hasValidLeadAccess(request: NextRequest) {
   const session = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
   return Boolean(session);
 }
+
+async function resolveLeadTenant(request: NextRequest, payload: Record<string, any>, supabase: ReturnType<typeof getSupabaseAdmin>): Promise<TenantContext> {
+  const headerSlug = request.headers.get("x-nextlead-tenant") || request.headers.get("x-tenant-slug");
+  const bodySlug = payload.tenant_slug || payload.tenantSlug || payload.tenant || payload.slug;
+  const bodyId = payload.tenant_id || payload.tenantId;
+  const requested = text(bodyId || bodySlug || headerSlug || "").toLowerCase();
+
+  // Compatibilidade: landing pages antigas não enviam tenant.
+  // Nesse caso, cai no tenant do host e, se não resolver, no tenant padrão NextLead.
+  if (!supabase) return getTenantContext(request.headers.get("host"));
+
+  if (requested) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requested);
+    let query = supabase
+      .from("tenants")
+      .select("id,slug,name,app_name,tagline,logo_url,mark_url,primary_color,secondary_color,custom_domain,plan,active")
+      .eq("active", true)
+      .limit(1);
+
+    query = isUuid ? query.eq("id", requested) : query.eq("slug", requested);
+    const { data, error } = await query.maybeSingle();
+
+    if (!error && data) {
+      return {
+        id: data.id || DEFAULT_TENANT_ID,
+        slug: data.slug || DEFAULT_TENANT_SLUG,
+        name: data.name || "NextLead",
+        appName: data.app_name || data.name || "NextLead CRM",
+        tagline: data.tagline || "Páginas que convertem",
+        logoUrl: data.logo_url || "/nextlead-logo.png",
+        markUrl: data.mark_url || data.logo_url || "/nextlead-mark.png",
+        primaryColor: data.primary_color || "#2f6bff",
+        secondaryColor: data.secondary_color || "#00d8ff",
+        customDomain: data.custom_domain || undefined,
+        plan: data.plan || undefined,
+        isDefault: data.id === DEFAULT_TENANT_ID || data.slug === DEFAULT_TENANT_SLUG,
+        tenantTableReady: true,
+      };
+    }
+  }
+
+  const hostTenant = await getTenantContext(request.headers.get("host"));
+  if (hostTenant.tenantTableReady) return hostTenant;
+
+  const { data } = await supabase
+    .from("tenants")
+    .select("id,slug,name,app_name,tagline,logo_url,mark_url,primary_color,secondary_color,custom_domain,plan,active")
+    .eq("id", DEFAULT_TENANT_ID)
+    .eq("active", true)
+    .limit(1)
+    .maybeSingle();
+
+  return data
+    ? {
+        id: data.id,
+        slug: data.slug || DEFAULT_TENANT_SLUG,
+        name: data.name || "NextLead",
+        appName: data.app_name || data.name || "NextLead CRM",
+        tagline: data.tagline || "Páginas que convertem",
+        logoUrl: data.logo_url || "/nextlead-logo.png",
+        markUrl: data.mark_url || data.logo_url || "/nextlead-mark.png",
+        primaryColor: data.primary_color || "#2f6bff",
+        secondaryColor: data.secondary_color || "#00d8ff",
+        customDomain: data.custom_domain || undefined,
+        plan: data.plan || undefined,
+        isDefault: true,
+        tenantTableReady: true,
+      }
+    : hostTenant;
+}
+
+async function getPipelineIdFromStage(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>, stageId: string, tenant: TenantContext) {
+  let query = supabase.from("pipeline_stages").select("pipeline_id").eq("id", stageId).limit(1);
+  if (tenant.tenantTableReady) query = query.eq("tenant_id", tenant.id);
+  const { data } = await query.maybeSingle();
+  return data?.pipeline_id || null;
+}
+
+function maybeMissingColumn(error: any, column: string) {
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes(column.toLowerCase()) && (message.includes("does not exist") || message.includes("schema cache"));
+}
+
 
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
@@ -124,8 +207,9 @@ export async function POST(request: NextRequest) {
     return json(request, { ok: true, demo: true, message: "Lead recebido. Configure Supabase para salvar." });
   }
 
-  const tenant = await getTenantContext(request.headers.get("host"));
+  const tenant = await resolveLeadTenant(request, payload, supabase);
   const firstStageId = await ensureDefaultPipeline(supabase, tenant);
+  const firstPipelineId = await getPipelineIdFromStage(supabase, firstStageId, tenant);
 
   const contactPayload: Record<string, any> = withTenant({
     name,
@@ -239,24 +323,38 @@ export async function POST(request: NextRequest) {
       return json(request, { error: `Contato salvo, mas falhou ao atualizar oportunidade: ${dealUpdateError.message}` }, { status: 500 });
     }
   } else {
-    const { data: deal, error: dealError } = await supabase
+    const fullDealPayload = withTenant({
+      ...dealPayload,
+      contact_id: contact.id,
+      stage_id: firstStageId,
+      ...(firstPipelineId ? { pipeline_id: firstPipelineId } : {}),
+    }, tenant);
+
+    let dealResult = await supabase
       .from("deals")
-      .insert(withTenant({
-        ...dealPayload,
-        contact_id: contact.id,
-        stage_id: firstStageId,
-      }, tenant))
+      .insert(fullDealPayload)
       .select("id")
       .single();
 
-    if (dealError) {
-      return json(request, { error: `Contato salvo, mas falhou ao criar oportunidade: ${dealError.message}` }, { status: 500 });
+    // Compatibilidade com bancos que ainda não tinham a coluna pipeline_id no cache/schema.
+    if (maybeMissingColumn(dealResult.error, "pipeline_id")) {
+      const safeDealPayload = { ...fullDealPayload } as Record<string, any>;
+      delete safeDealPayload.pipeline_id;
+      dealResult = await supabase
+        .from("deals")
+        .insert(safeDealPayload)
+        .select("id")
+        .single();
     }
 
-    dealId = deal.id;
+    if (dealResult.error) {
+      return json(request, { error: `Contato salvo, mas falhou ao criar oportunidade: ${dealResult.error.message}` }, { status: 500 });
+    }
+
+    dealId = dealResult.data.id;
   }
 
   await upsertInitialContactActivity({ supabase, contactId: contact.id, temperature, tenant });
 
-  return json(request, { ok: true, contactId: contact.id, dealId });
+  return json(request, { ok: true, contactId: contact.id, dealId, tenantId: tenant.id, tenantSlug: tenant.slug });
 }
