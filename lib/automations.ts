@@ -320,9 +320,43 @@ async function insertAutomationRun(
   tenant: TenantContext,
   record: Record<string, any>,
 ) {
-  const full = withTenant(record, tenant);
-  const { error } = await supabase.from("automation_runs").insert(full);
-  return error;
+  const clean = (value: Record<string, any>) =>
+    Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
+
+  const full = clean(withTenant(record, tenant));
+  const first = await supabase.from("automation_runs").insert(full).select("id").single();
+  if (!first.error) return { id: first.data?.id, error: null };
+
+  console.error("NextLead automation_runs insert failed", first.error.message);
+
+  // Fallback 1: alguns bancos podem estar com migration parcial e sem input/output jsonb.
+  const minimal = clean(withTenant({
+    automation_id: record.automation_id || null,
+    contact_id: record.contact_id || null,
+    deal_id: record.deal_id || null,
+    status: record.status || "success",
+    summary: record.summary || null,
+    error: record.error || first.error.message || null,
+    created_at: new Date().toISOString(),
+  }, tenant));
+
+  const second = await supabase.from("automation_runs").insert(minimal).select("id").single();
+  if (!second.error) return { id: second.data?.id, error: null };
+
+  console.error("NextLead automation_runs minimal insert failed", second.error.message);
+
+  // Fallback 2: último recurso para pelo menos aparecer no diagnóstico.
+  const bare = clean({
+    status: record.status || "error",
+    summary: record.summary || "Execução SDR registrada com fallback.",
+    error: record.error || second.error.message || first.error.message || null,
+    created_at: new Date().toISOString(),
+  });
+  const third = await supabase.from("automation_runs").insert(bare).select("id").single();
+  if (!third.error) return { id: third.data?.id, error: null };
+
+  console.error("NextLead automation_runs bare insert failed", third.error.message);
+  return { id: null, error: third.error };
 }
 
 function isAutoSdrGloballyEnabled() {
@@ -416,6 +450,16 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
   }
 
   const contact = mapContactRow(contactResult.data);
+
+  if (input.source === "webhook") {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      contact_id: contact.id,
+      status: "started",
+      summary: "Webhook recebido; SDR iniciou análise do contato.",
+      input: { contactId: contact.id, mode, source: input.source || "manual" },
+    });
+  }
 
   const recentRuns = await applyTenantFilter(
     supabase

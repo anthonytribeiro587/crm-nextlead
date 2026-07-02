@@ -652,6 +652,7 @@ export async function persistEvolutionWebhook(payload: any) {
     if (!fromMe) {
       try {
         await ensureDefaultAutomations(supabase, tenant);
+        console.info("NextLead SDR webhook start", JSON.stringify({ phone, contactId: contact.id, tenantId: tenant.id }).slice(0, 800));
         const automationResult = await runSdrAutomationForContact({ contactId: contact.id, tenant, source: "webhook" });
         automationResults.push({ phone, contactId: contact.id, ...automationResult });
         console.info("NextLead SDR webhook result", JSON.stringify({ phone, contactId: contact.id, ...automationResult }).slice(0, 1800));

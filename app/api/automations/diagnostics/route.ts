@@ -39,6 +39,17 @@ export async function GET() {
     }));
   }
 
+  let recentRuns = data.runs.slice(0, 8);
+  let recentRunsFallback: any[] = [];
+  if (supabase && recentRuns.length === 0) {
+    const fallbackRuns = await supabase
+      .from("automation_runs")
+      .select("id,tenant_id,automation_id,contact_id,deal_id,status,summary,error,created_at")
+      .order("created_at", { ascending: false })
+      .limit(8);
+    recentRunsFallback = fallbackRuns.error ? [{ error: fallbackRuns.error.message }] : (fallbackRuns.data || []);
+  }
+
   const gemini = await testGeminiConnection("Responda apenas: OK Gemini NextLead.");
 
   return NextResponse.json({
@@ -54,7 +65,8 @@ export async function GET() {
     sdr,
     tableReady: data.tableReady,
     tableError: data.error || null,
-    recentRuns: data.runs.slice(0, 8),
+    recentRuns,
+    recentRunsFallback,
     recentWebhooks,
     gemini,
   }, { headers: { "Cache-Control": "no-store" } });
