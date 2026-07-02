@@ -47,3 +47,19 @@ Depois do deploy, testar:
 4. Teste um lead em pipeline personalizado pelo `/inbox`.
 
 O objetivo é impedir que o Inbox use etapas fixas do Comercial quando a oportunidade estiver em outro pipeline.
+
+## v14.4 — Automações
+
+Após deploy, rode a migration:
+
+```sql
+scripts/migration-v7-automations-sdr.sql
+```
+
+Depois acesse **Administração > Automações** e deixe o SDR inicialmente em **Sugerir resposta**. Só use **Automático SDR** depois de testar bastante e configurar:
+
+```env
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-1.5-flash
+NEXTLEAD_ENABLE_AUTO_SDR=true
+```

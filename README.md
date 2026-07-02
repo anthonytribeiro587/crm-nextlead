@@ -68,3 +68,28 @@ Depois do deploy, testar:
 4. Conferir se aparece o nome do funil correto no topo.
 5. Alterar a etapa dentro do Inbox e confirmar que só aparecem etapas daquele funil.
 6. Trocar o campo `Funil` no painel lateral e confirmar que o lead foi para a primeira etapa do novo pipeline.
+
+## v14.4 — Automações + SDR Foundation
+
+Esta versão adiciona a aba **Automações** no menu de Administração e cria a base do Agente SDR NextLead.
+
+Antes de usar em produção, rode no Supabase:
+
+```sql
+scripts/migration-v7-automations-sdr.sql
+```
+
+Variáveis opcionais para IA externa com Gemini:
+
+```env
+GEMINI_API_KEY=sua_chave_do_gemini
+GEMINI_MODEL=gemini-1.5-flash
+```
+
+Por segurança, o modo automático só envia mensagens se esta variável estiver explicitamente ativa:
+
+```env
+NEXTLEAD_ENABLE_AUTO_SDR=true
+```
+
+Sem `GEMINI_API_KEY`, o SDR funciona com análise local simples e modo sugestão.

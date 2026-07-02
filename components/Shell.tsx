@@ -15,6 +15,7 @@ import {
   Palette,
   Settings,
   Smartphone,
+  Workflow,
   Users,
 } from "lucide-react";
 
@@ -50,6 +51,7 @@ const navSections: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/conexoes", label: "WhatsApp & conexões", short: "WhatsApp", icon: Smartphone },
       { href: "/marca", label: "Marca e empresa", short: "Marca", icon: Palette },
+      { href: "/automacoes", label: "Automações", short: "Auto", icon: Workflow },
       { href: "/configuracoes", label: "Configurações", short: "Config.", icon: Settings },
     ],
   },

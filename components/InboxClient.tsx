@@ -334,6 +334,7 @@ export function InboxClient({
   const [draft, setDraft] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [assistantNote, setAssistantNote] = useState<string | null>(null);
+  const [sdrRunning, setSdrRunning] = useState(false);
   const [activePanel, setActivePanel] = useState<"acoes" | "ordens" | "proposta" | "assistente" | "historico">("acoes");
   const [showInspector, setShowInspector] = useState(false);
   const [moving, setMoving] = useState<string | null>(null);
@@ -1063,6 +1064,36 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
         : `Perfeito, ${name}. Pelo que você comentou, faz sentido eu te mandar uma proposta objetiva com o que entraria, prazo e investimento. Posso seguir por esse caminho?`;
     setDraft(text);
     setAssistantNote("Sugestão colocada no campo de mensagem. Revise antes de enviar.");
+  }
+
+  async function runSdrAgent() {
+    if (!selected) return;
+    setSdrRunning(true);
+    setAssistantNote("Analisando conversa com o Agente SDR...");
+    try {
+      const response = await fetch("/api/automations/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactId: selected.id, mode: "suggest" }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Erro ao rodar SDR.");
+      const analysis = result.analysis || {};
+      if (analysis.suggestedReply) setDraft(String(analysis.suggestedReply));
+      setAssistantNote(
+        `${analysis.summary || "SDR analisou o atendimento."}
+
+Temperatura sugerida: ${analysis.temperature || "morno"}. ${analysis.shouldHandoff ? `Entregar para humano: ${analysis.handoffReason || "lead qualificado"}.` : `Próxima pergunta: ${analysis.nextQuestion || "continuar qualificação"}.`}`,
+      );
+      if (analysis.temperature && selected.temperature !== analysis.temperature) {
+        setContacts((current) => current.map((contact) => contact.id === selected.id ? { ...contact, temperature: analysis.temperature } : contact));
+      }
+      await logCommercialHistory(`IA SDR analisou lead: ${analysis.temperature || "morno"}`);
+    } catch (error) {
+      setAssistantNote(error instanceof Error ? error.message : "Erro ao rodar SDR.");
+    } finally {
+      setSdrRunning(false);
+    }
   }
 
   async function deleteConversation(contactId: string) {
@@ -1883,14 +1914,17 @@ Se fizer sentido para você, o próximo passo é confirmarmos o escopo e eu já 
           {activePanel === "assistente" && (
             <div className="inspector-section">
               <div className="inspector-headline">
-                <span className="eyebrow-small">Assistente IA</span>
-                <strong>Ajuda de atendimento</strong>
+                <span className="eyebrow-small">Agente SDR</span>
+                <strong>Qualificação NextLead</strong>
               </div>
+              <p className="muted tool-hint">O SDR identifica tipo de negócio, site/landing, intenção de receber clientes pelo WhatsApp e sugere a próxima resposta. O envio continua manual.</p>
               <div className="quick-replies-grid">
                 <button className="quick-reply" onClick={summarizeConversation}>Resumo</button>
-                <button className="quick-reply" onClick={suggestNextReply}>Sugerir resposta</button>
+                <button className="quick-reply" onClick={suggestNextReply}>Resposta rápida</button>
+                <button className="quick-reply" onClick={runSdrAgent} disabled={sdrRunning}>{sdrRunning ? "Analisando..." : "Rodar SDR"}</button>
               </div>
-              {assistantNote ? <p className="assistant-note">{assistantNote}</p> : <p className="muted tool-hint">Use para resumir a conversa ou montar uma resposta inicial. Ainda é local, sem API externa.</p>}
+              {assistantNote ? <p className="assistant-note sdr-assistant-note">{assistantNote}</p> : <p className="muted tool-hint">Clique em Rodar SDR para gerar uma sugestão com base no histórico do lead.</p>}
+              <a className="btn mini secondary" href="/automacoes">Configurar automações</a>
             </div>
           )}
 
