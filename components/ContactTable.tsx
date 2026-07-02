@@ -48,6 +48,7 @@ export function ContactTable({
   const [selectedId, setSelectedId] = useState<string | null>(contacts[0]?.id || null);
   const [status, setStatus] = useState<string | null>(null);
   const [creatingOrder, setCreatingOrder] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const router = useRouter();
 
   const stageById = useMemo(() => new Map(stages.map((stage) => [stage.id, stage])), [stages]);
@@ -249,7 +250,7 @@ export function ContactTable({
               const deal = dealByContact.get(contact.id);
               const orders = ordersByContact.get(contact.id) || [];
               return (
-                <button type="button" className={`crm-contact-row ${selected?.id === contact.id ? "active" : ""}`} key={contact.id} onClick={() => setSelectedId(contact.id)}>
+                <button type="button" className={`crm-contact-row ${selected?.id === contact.id ? "active" : ""}`} key={contact.id} onClick={() => { setSelectedId(contact.id); setTimelineOpen(false); }}>
                   <span className="avatar-small">{contact.name.charAt(0).toUpperCase()}</span>
                   <span>
                     <strong>{contact.name}</strong>
@@ -323,17 +324,34 @@ export function ContactTable({
               ))}
             </div>
 
-            <div className="crm-timeline-panel">
-              <p className="eyebrow-small">Histórico completo</p>
-              <div className="timeline-list-pro crm-timeline-list">
-                {timeline.map((item) => (
-                  <div key={item.id} className={`timeline-item ${item.tone || "neutral"}`}>
-                    <strong>{item.title}</strong>
-                    <span>{item.detail}</span>
-                    <small>{shortDate(item.date)}</small>
-                  </div>
-                ))}
+            <div className={`crm-timeline-panel ${timelineOpen ? "expanded" : "collapsed"}`}>
+              <div className="crm-timeline-head">
+                <div>
+                  <p className="eyebrow-small">Histórico completo</p>
+                  <h3>Linha do tempo</h3>
+                  <span>{timeline.length} movimentações registradas</span>
+                </div>
+                <button type="button" className="btn mini secondary" onClick={() => setTimelineOpen((current) => !current)}>
+                  {timelineOpen ? "Recolher" : "Expandir"}
+                </button>
               </div>
+
+              {timelineOpen ? (
+                <div className="timeline-list-pro crm-timeline-list">
+                  {timeline.map((item) => (
+                    <div key={item.id} className={`timeline-item ${item.tone || "neutral"}`}>
+                      <strong>{item.title}</strong>
+                      <span>{item.detail}</span>
+                      <small>{shortDate(item.date)}</small>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="crm-timeline-preview">
+                  <strong>{timeline[0]?.title || "Sem histórico ainda"}</strong>
+                  <span>{timeline[0]?.detail || "As movimentações aparecerão aqui quando o lead avançar."}</span>
+                </div>
+              )}
             </div>
           </>
         )}

@@ -8509,3 +8509,126 @@ button:disabled {
   .mobile-bottom-nav { padding-inline: 5px !important; }
   .mobile-bottom-link span { font-size: 7.4px !important; }
 }
+
+/* NextLead CRM — v12.9 ajustes finos: dropdown sempre acima, CRM menos comprido e dashboard mais compacto */
+.smart-select { z-index: 1; }
+.smart-select.open { z-index: 100000; }
+.smart-select-menu,
+.smart-select-menu-portal {
+  position: fixed !important;
+  z-index: 2147483000 !important;
+  inset-inline: auto !important;
+  top: auto;
+  left: auto;
+  isolation: isolate;
+}
+.smart-select-menu-portal {
+  overscroll-behavior: contain;
+}
+.pipeline-smart-select .smart-select-menu,
+.filter-smart-select .smart-select-menu,
+.header-smart-select .smart-select-menu,
+.mini-smart-select .smart-select-menu {
+  z-index: 2147483000 !important;
+}
+
+.crm-workspace {
+  grid-template-columns: minmax(360px, 460px) minmax(0, 1fr) !important;
+}
+.crm-list-card {
+  align-self: start;
+}
+.crm-list-head {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 12px !important;
+}
+.crm-list-head .description {
+  max-width: 34ch;
+}
+.crm-list-head .input {
+  max-width: none !important;
+}
+.crm-contact-row {
+  grid-template-columns: 42px minmax(0, 1fr) auto !important;
+  min-height: 76px;
+}
+.crm-contact-row > span:nth-child(2) {
+  min-width: 0;
+}
+.crm-row-meta {
+  align-self: stretch;
+  align-content: center;
+}
+.crm-detail-card {
+  overflow: auto;
+}
+.crm-timeline-panel.collapsed {
+  padding: 14px;
+}
+.crm-timeline-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.crm-timeline-head h3 {
+  margin: 2px 0 4px;
+  font-size: 1rem;
+}
+.crm-timeline-head span {
+  color: var(--muted);
+  font-size: .82rem;
+}
+.crm-timeline-preview {
+  margin-top: 12px;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px dashed rgba(148, 163, 184, .16);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, .22);
+}
+.crm-timeline-preview strong {
+  color: #f8fbff;
+}
+.crm-timeline-preview span {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crm-timeline-panel.collapsed .crm-timeline-head .btn {
+  min-width: 96px;
+}
+.crm-timeline-panel.expanded .crm-timeline-list {
+  margin-top: 12px;
+}
+
+.dash-board-clean {
+  grid-template-columns: minmax(0, .9fr) minmax(360px, 1.1fr) !important;
+  align-items: start !important;
+}
+.dash-main-card {
+  padding: 16px !important;
+}
+.dash-task-list .dash-empty {
+  min-height: 52px !important;
+  padding: 12px !important;
+}
+.dash-small-card {
+  padding: 16px !important;
+}
+
+@media (max-width: 1180px) {
+  .dash-board-clean { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 1100px) {
+  .crm-workspace { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 860px) {
+  .crm-contact-row { grid-template-columns: 42px minmax(0, 1fr) !important; }
+  .crm-row-meta { grid-column: 1 / -1; }
+  .crm-timeline-head { display: grid; }
+  .crm-timeline-head .btn { width: 100%; }
+}
