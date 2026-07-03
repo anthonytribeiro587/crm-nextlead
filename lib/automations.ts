@@ -929,6 +929,81 @@ function shouldSkipBecauseRecentRun(runs: any[], mode: AutomationMode, latestInb
   });
 }
 
+function hasRecentSuccessfulHandoff(runs: any[], hours = 24) {
+  const since = Date.now() - Math.max(1, hours) * 60 * 60 * 1000;
+  return (runs || []).some((run) => {
+    if (String(run.status || "") !== "success") return false;
+    const created = new Date(run.created_at || 0).getTime();
+    if (!created || Number.isNaN(created) || created < since) return false;
+    const output = run.output || {};
+    const summary = compactText(run.summary || "").toLowerCase();
+    return Boolean(output.shouldHandoff || output.state?.phase === "handoff" || summary.includes("entregue") || summary.includes("protótipo") || summary.includes("prototipo"));
+  });
+}
+
+function isPostHandoffThanksOrShortAck(text: string) {
+  const normalized = normalizeBasic(text);
+  if (!normalized) return true;
+  if (normalized.length <= 4) return true;
+  return hasAny(normalized, ["obrigado", "obrigada", "valeu", "show", "beleza", "blz", "ok", "certo", "ta bom", "tá bom", "perfeito", "fechado"]);
+}
+
+async function findSdrStageId(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  tenant: TenantContext,
+  deal: Deal | undefined,
+  target: "contacted" | "handoff",
+) {
+  const pipelineId = deal?.pipelineId;
+  if (!pipelineId) return undefined;
+
+  const result = await applyTenantFilter(
+    supabase
+      .from("pipeline_stages")
+      .select("id,pipeline_id,title,position,color")
+      .eq("pipeline_id", pipelineId)
+      .order("position", { ascending: true }),
+    tenant,
+  );
+  const rows = result.data || [];
+  if (!rows.length) return undefined;
+
+  const normalizeTitle = (value: string) => normalizeBasic(value);
+  const preferred = target === "handoff"
+    ? ["briefing recebido", "diagnostico", "diagnóstico", "contato feito", "em criacao", "em criação"]
+    : ["contato feito", "qualificacao", "qualificação", "diagnostico", "diagnóstico"];
+
+  for (const term of preferred) {
+    const found = rows.find((stage: any) => normalizeTitle(stage.title || "").includes(normalizeTitle(term)));
+    if (found?.id) return found.id as string;
+  }
+
+  return rows[Math.min(1, rows.length - 1)]?.id as string | undefined;
+}
+
+async function updateDealStageFromSdr(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  tenant: TenantContext,
+  deal: Deal | undefined,
+  analysis: SdrAnalysis,
+) {
+  if (!deal?.id) return { updated: false };
+  const target = analysis.shouldHandoff ? "handoff" : analysis.extracted?.businessType ? "contacted" : undefined;
+  if (!target) return { updated: false };
+
+  const nextStageId = await findSdrStageId(supabase, tenant, deal, target);
+  if (!nextStageId || nextStageId === deal.stageId) return { updated: false, stageId: deal.stageId };
+
+  const result = await applyTenantFilter(
+    supabase
+      .from("deals")
+      .update({ stage_id: nextStageId, updated_at: new Date().toISOString() })
+      .eq("id", deal.id),
+    tenant,
+  );
+  return { updated: !result.error, stageId: nextStageId, error: result.error?.message };
+}
+
 
 function mapContactRow(row: any): Contact {
   return {
@@ -1159,6 +1234,19 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
 
   const stateLoad = await loadSdrState(supabase, tenant, contact.id);
 
+  if (input.source === "webhook" && (stateLoad.state?.phase === "handoff" || hasRecentSuccessfulHandoff(recentRuns.data || []))) {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      contact_id: contact.id,
+      deal_id: deal?.id || null,
+      status: "skipped",
+      summary: "SDR pausado: lead já foi entregue para vendedor enviar protótipo/sugestão.",
+      input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText, inboundMessageId: input.inboundMessageId },
+      output: { state: stateLoad.state, reason: isPostHandoffThanksOrShortAck(latestInboundText) ? "ack_after_handoff" : "handoff_active" },
+    });
+    return { ok: true, skipped: true, mode, sent: false, reason: "Lead já entregue para atendimento humano." };
+  }
+
   const outboundMessages = messages.filter((message) => message.direction === "outbound");
   const lastOutbound = outboundMessages.at(-1);
   const lastOutboundAt = lastOutbound?.createdAt ? new Date(lastOutbound.createdAt).getTime() : 0;
@@ -1240,6 +1328,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
   }
 
   await applyTenantFilter(supabase.from("contacts").update({ temperature: analysis.temperature, updated_at: new Date().toISOString() }).eq("id", contact.id), tenant);
+  const stageUpdate = await updateDealStageFromSdr(supabase, tenant, deal, analysis);
 
   const historyTitle = analysis.shouldHandoff
     ? `IA SDR qualificou lead como ${analysis.temperature}. ${analysis.handoffReason}`
@@ -1292,7 +1381,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
         status: "error",
         summary: "Falha ao enviar resposta automática do SDR.",
         input: { contactId: contact.id, mode, source: input.source || "manual" },
-        output: { ...analysis, latestInboundText },
+        output: { ...analysis, stageUpdate, latestInboundText },
         error: error.message,
       });
       return { ok: false, status: 500, error: error.message, mode, sent: false, analysis };
@@ -1306,7 +1395,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
     status: "success",
     summary: sent ? "IA SDR respondeu automaticamente." : "IA SDR gerou sugestão de atendimento.",
     input: { contactId: contact.id, mode, source: input.source || "manual", latestInboundText, inboundMessageId: input.inboundMessageId },
-    output: { ...analysis, autoSendEnabled: isAutoSdrGloballyEnabled(), providerMessageId, latestInboundText, inboundMessageId: input.inboundMessageId },
+    output: { ...analysis, stageUpdate, autoSendEnabled: isAutoSdrGloballyEnabled(), providerMessageId, latestInboundText, inboundMessageId: input.inboundMessageId },
   });
 
   if (automation?.id) {
