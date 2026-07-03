@@ -79,12 +79,13 @@ Regras obrigatórias:
 - Não use markdown pesado; no máximo quebras de linha curtas.
 
 Fluxo obrigatório do SDR:
-1. Saudação + contexto simples: explique que a Next Lead cria uma página simples para apresentar o serviço e levar o cliente ao WhatsApp.
-2. Perguntar tipo de negócio. Não avance sem entender minimamente o negócio.
-3. Perguntar presença atual: se já tem site/página ou se hoje usa Instagram/WhatsApp.
-4. Perguntar objetivo: se a pessoa quer receber mais pedidos de orçamento/clientes pelo WhatsApp.
-5. Perguntar momento: se quer ver uma sugestão/protótipo agora ou se está só pesquisando.
-6. Entregar para vendedor: quando houver negócio + objetivo confirmado, diga que alguém da equipe vai preparar uma sugestão/protótipo.
+1. Primeira mensagem: não assuma que a pessoa sabe o que é landing page. Pergunte se ela já conhece a Next Lead ou se busca algum serviço específico. Explique em uma frase que a Next Lead cria páginas simples para apresentar negócios e levar clientes ao WhatsApp.
+2. Se a pessoa já for cliente, pedir suporte, pedir ajuste, falar de protótipo em andamento ou não souber explicar, entregue para humano.
+3. Perguntar tipo de negócio somente quando o lead ainda não informou o negócio. Não avance sem entender minimamente o negócio.
+4. Perguntar presença atual: se já tem site/página ou se hoje usa Instagram/WhatsApp.
+5. Perguntar objetivo: se a pessoa quer receber mais pedidos de orçamento/clientes pelo WhatsApp.
+6. Perguntar momento: se quer ver uma sugestão/protótipo agora ou se está só pesquisando.
+7. Entregar para vendedor: quando houver negócio + objetivo confirmado, mova para Pipeline de Protótipos/Briefing recebido quando existir e diga que alguém da equipe vai preparar uma sugestão/protótipo.
 
 Tratamento de respostas curtas:
 - Se responder “WhatsApp”, “Instagram” ou “só WhatsApp”, entenda como canal atual, não como objetivo confirmado.
@@ -382,9 +383,71 @@ function isConfusionMessage(text: string) {
   ]);
 }
 
+
+function isExistingClientOrSupportMessage(text: string) {
+  const t = normalizeBasic(text);
+  return hasAny(t, [
+    "sou cliente",
+    "ja sou cliente",
+    "já sou cliente",
+    "cliente de voces",
+    "cliente de vocês",
+    "meu site",
+    "minha pagina",
+    "minha página",
+    "meu prototipo",
+    "meu protótipo",
+    "prototipo pronto",
+    "protótipo pronto",
+    "ajuste",
+    "alterar",
+    "corrigir",
+    "bug",
+    "problema",
+    "suporte",
+    "chamar anthony",
+    "falar com anthony",
+    "atendente",
+    "humano",
+  ]);
+}
+
+function isServiceInterestMessage(text: string) {
+  const t = normalizeBasic(text);
+  return hasAny(t, [
+    "site",
+    "pagina",
+    "página",
+    "landing",
+    "landing page",
+    "crm",
+    "automacao",
+    "automação",
+    "whatsapp",
+    "captação",
+    "captacao",
+    "leads",
+    "orcamento",
+    "orçamento",
+    "prototipo",
+    "protótipo",
+    "quero conhecer",
+    "quero saber",
+    "nao conheco",
+    "não conheço",
+    "conhecer os servicos",
+    "conhecer os serviços",
+  ]);
+}
+
+function isGenericGreetingOrOpening(text: string) {
+  const t = normalizeBasic(text);
+  return isGreetingOnly(t) || hasAny(t, ["bom dia", "boa tarde", "boa noite", "tudo bem", "como vai"]);
+}
+
 function educationalReplyForPhase(phase: SdrPhase, first: string, state: Partial<SdrState>) {
   if (phase === "ask_business") {
-    return `Claro, ${first}. A Next Lead ajuda negócios a receberem mais contatos pelo WhatsApp através de uma página simples de divulgação. Qual é o tipo do seu negócio?`;
+    return `Claro, ${first}. A Next Lead cria páginas simples para apresentar negócios e levar clientes direto para o WhatsApp. Você já conhece nossos serviços ou está buscando algo específico?`;
   }
   if (phase === "ask_presence") {
     return `Claro. Landing page é uma página simples que apresenta seu serviço e leva o cliente direto para o WhatsApp. Hoje você já tem alguma página ou atende só por Instagram/WhatsApp?`;
@@ -609,8 +672,8 @@ function computeSdrStateMachine(input: {
 
   const setAskBusiness = () => {
     state.phase = "ask_business";
-    nextQuestion = "qual é o tipo do seu negócio?";
-    suggestedReply = `Oi, ${first}! Aqui é da Next Lead. A gente cria uma página simples para apresentar seu serviço e levar clientes direto para o WhatsApp. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
+    nextQuestion = "você já conhece nossos serviços ou está buscando algo específico?";
+    suggestedReply = `Bom dia, ${first}! Aqui é da Next Lead. A gente cria páginas simples para apresentar negócios e levar clientes direto para o WhatsApp. Você já conhece nossos serviços ou está buscando algo específico?`;
   };
 
   const setAskPresence = () => {
@@ -659,12 +722,24 @@ function computeSdrStateMachine(input: {
     state.phase = previousPhase === "paused" ? "ask_goal" : previousPhase;
     nextQuestion = suggestedReply.includes("?") ? suggestedReply.slice(suggestedReply.lastIndexOf(".") + 1).trim() || nextQuestion : nextQuestion;
   } else if (previousPhase === "ask_business") {
-    const business = inferBusinessFromAnswer(lastInbound, contact) || inferBusinessType(lastInbound, contact);
-    if (business) {
-      state.businessType = business;
-      setAskPresence();
+    if (isExistingClientOrSupportMessage(lastInbound)) {
+      state.businessType = state.businessType || inferBusinessFromAnswer(lastInbound, contact) || "cliente existente / suporte";
+      state.wantsWhatsAppLeads = state.wantsWhatsAppLeads === "sim" ? "sim" : "nao_informado";
+      setHandoff();
+      handoffReason = "Lead parece ser cliente existente, suporte ou pedido que precisa de atendimento humano.";
+      suggestedReply = `Certo, ${first}. Vou encaminhar seu atendimento para alguém da equipe da Next Lead te ajudar por aqui.`;
     } else {
-      setAskBusiness();
+      const business = inferBusinessFromAnswer(lastInbound, contact) || inferBusinessType(lastInbound, contact);
+      if (business) {
+        state.businessType = business;
+        setAskPresence();
+      } else if (isServiceInterestMessage(lastInbound) && !isGenericGreetingOrOpening(lastInbound)) {
+        nextQuestion = "qual é o tipo do seu negócio?";
+        suggestedReply = `Legal, ${first}. A gente consegue te orientar melhor entendendo primeiro o tipo do negócio. Você trabalha com qual segmento?`;
+        state.phase = "ask_business";
+      } else {
+        setAskBusiness();
+      }
     }
   } else if (previousPhase === "ask_presence") {
     const website = inferHasWebsite(lastInbound);
@@ -856,8 +931,8 @@ function refineSdrAnalysis(input: {
   let suggestedReply = analysis.suggestedReply || "";
 
   if (!businessType) {
-    nextQuestion = "qual é o tipo do seu negócio?";
-    suggestedReply = `Oi, ${first}! Aqui é da Next Lead. A gente cria uma página simples para apresentar seu serviço e levar clientes direto para o WhatsApp. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
+    nextQuestion = "você já conhece nossos serviços ou está buscando algo específico?";
+    suggestedReply = `Bom dia, ${first}! Aqui é da Next Lead. A gente cria páginas simples para apresentar negócios e levar clientes direto para o WhatsApp. Você já conhece nossos serviços ou está buscando algo específico?`;
     analysis.temperature = analysis.temperature === "quente" ? "morno" : analysis.temperature || "frio";
     analysis.shouldHandoff = false;
     analysis.handoffReason = "Ainda falta identificar o tipo de negócio do lead.";
@@ -948,15 +1023,34 @@ function isPostHandoffThanksOrShortAck(text: string) {
   return hasAny(normalized, ["obrigado", "obrigada", "valeu", "show", "beleza", "blz", "ok", "certo", "ta bom", "tá bom", "perfeito", "fechado"]);
 }
 
-async function findSdrStageId(
+async function findPipelineByNameHint(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   tenant: TenantContext,
-  deal: Deal | undefined,
-  target: "contacted" | "handoff",
+  hints: string[],
 ) {
-  const pipelineId = deal?.pipelineId;
-  if (!pipelineId) return undefined;
+  const result = await applyTenantFilter(
+    supabase
+      .from("pipelines")
+      .select("id,name,created_at")
+      .order("created_at", { ascending: true }),
+    tenant,
+  );
+  const rows = result.data || [];
+  const normalizedHints = hints.map((hint) => normalizeBasic(hint));
+  const found = rows.find((pipeline: any) => {
+    const name = normalizeBasic(pipeline.name || "");
+    return normalizedHints.some((hint) => name.includes(hint));
+  });
+  return found as any | undefined;
+}
 
+async function findStageInPipeline(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  tenant: TenantContext,
+  pipelineId: string | undefined,
+  preferred: string[],
+) {
+  if (!pipelineId) return undefined;
   const result = await applyTenantFilter(
     supabase
       .from("pipeline_stages")
@@ -968,17 +1062,49 @@ async function findSdrStageId(
   const rows = result.data || [];
   if (!rows.length) return undefined;
 
-  const normalizeTitle = (value: string) => normalizeBasic(value);
+  for (const term of preferred) {
+    const normalizedTerm = normalizeBasic(term);
+    const found = rows.find((stage: any) => normalizeBasic(stage.title || "").includes(normalizedTerm));
+    if (found?.id) return found as any;
+  }
+
+  return rows[Math.min(1, rows.length - 1)] as any | undefined;
+}
+
+async function findSdrStageTarget(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  tenant: TenantContext,
+  deal: Deal | undefined,
+  target: "contacted" | "handoff",
+) {
+  if (target === "handoff") {
+    const prototypePipeline = await findPipelineByNameHint(supabase, tenant, ["prototipo", "protótipo", "prototype"]);
+    if (prototypePipeline?.id) {
+      const prototypeStage = await findStageInPipeline(supabase, tenant, prototypePipeline.id, [
+        "briefing recebido",
+        "briefing",
+        "em criacao",
+        "em criação",
+        "diagnostico",
+        "diagnóstico",
+        "novo lead",
+      ]);
+      if (prototypeStage?.id) {
+        return { pipelineId: prototypePipeline.id as string, stageId: prototypeStage.id as string, source: "prototype_pipeline" };
+      }
+    }
+  }
+
+  const pipelineId = deal?.pipelineId;
+  if (!pipelineId) return undefined;
+
   const preferred = target === "handoff"
     ? ["briefing recebido", "diagnostico", "diagnóstico", "contato feito", "em criacao", "em criação"]
     : ["contato feito", "qualificacao", "qualificação", "diagnostico", "diagnóstico"];
 
-  for (const term of preferred) {
-    const found = rows.find((stage: any) => normalizeTitle(stage.title || "").includes(normalizeTitle(term)));
-    if (found?.id) return found.id as string;
-  }
-
-  return rows[Math.min(1, rows.length - 1)]?.id as string | undefined;
+  const stage = await findStageInPipeline(supabase, tenant, pipelineId, preferred);
+  if (!stage?.id) return undefined;
+  return { pipelineId, stageId: stage.id as string, source: "current_pipeline" };
 }
 
 async function updateDealStageFromSdr(
@@ -991,17 +1117,26 @@ async function updateDealStageFromSdr(
   const target = analysis.shouldHandoff ? "handoff" : analysis.extracted?.businessType ? "contacted" : undefined;
   if (!target) return { updated: false };
 
-  const nextStageId = await findSdrStageId(supabase, tenant, deal, target);
-  if (!nextStageId || nextStageId === deal.stageId) return { updated: false, stageId: deal.stageId };
+  const nextTarget = await findSdrStageTarget(supabase, tenant, deal, target);
+  if (!nextTarget?.stageId) return { updated: false, stageId: deal.stageId, reason: "stage_not_found" };
+
+  const shouldChangePipeline = Boolean(nextTarget.pipelineId && nextTarget.pipelineId !== deal.pipelineId);
+  if (!shouldChangePipeline && nextTarget.stageId === deal.stageId) return { updated: false, stageId: deal.stageId, pipelineId: deal.pipelineId };
 
   const result = await applyTenantFilter(
     supabase
       .from("deals")
-      .update({ stage_id: nextStageId, updated_at: new Date().toISOString() })
+      .update({ pipeline_id: nextTarget.pipelineId, stage_id: nextTarget.stageId, updated_at: new Date().toISOString() })
       .eq("id", deal.id),
     tenant,
   );
-  return { updated: !result.error, stageId: nextStageId, error: result.error?.message };
+  return {
+    updated: !result.error,
+    stageId: nextTarget.stageId,
+    pipelineId: nextTarget.pipelineId,
+    source: nextTarget.source,
+    error: result.error?.message,
+  };
 }
 
 
@@ -1437,7 +1572,7 @@ export function analyzeSdrLocally(input: {
   const suggestedReply = shouldHandoff
     ? `Perfeito, ${first}. Pelo que você me falou, faz sentido a equipe da Next Lead avaliar o melhor caminho para captar mais contatos pelo WhatsApp. Vou encaminhar para alguém te orientar.`
     : !businessType
-      ? `Oi, ${first}! Aqui é da Next Lead. A gente cria uma página simples para apresentar seu serviço e levar clientes direto para o WhatsApp. Pra eu te orientar melhor: qual é o tipo do seu negócio?`
+      ? `Bom dia, ${first}! Aqui é da Next Lead. A gente cria páginas simples para apresentar negócios e levar clientes direto para o WhatsApp. Você já conhece nossos serviços ou está buscando algo específico?`
       : `Legal, ${first}. ${missingQuestion.charAt(0).toUpperCase()}${missingQuestion.slice(1)}`;
 
   const summaryParts = [
