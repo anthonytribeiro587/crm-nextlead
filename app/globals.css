@@ -10236,3 +10236,79 @@ button:disabled {
     min-height: 260px;
   }
 }
+
+/* v16.0 - Fluxo aparente do SDR */
+.sdr-flow-builder-v160 {
+  margin-top: 18px;
+}
+.sdr-flow-steps-v160 {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.sdr-flow-steps-v160 article {
+  border: 1px solid rgba(46, 211, 255, 0.18);
+  background: rgba(8, 18, 35, 0.55);
+  border-radius: 18px;
+  padding: 14px;
+  min-width: 0;
+}
+.sdr-flow-steps-v160 span {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4c6fff, #06b6d4);
+  color: #fff;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+.sdr-flow-steps-v160 strong {
+  display: block;
+  color: var(--text-strong, #f8fbff);
+  margin-bottom: 8px;
+}
+.sdr-flow-steps-v160 p,
+.sdr-flow-steps-v160 small {
+  display: block;
+  color: var(--text-muted, #aeb8cc);
+  line-height: 1.45;
+}
+.sdr-flow-steps-v160 small {
+  margin-top: 10px;
+  opacity: 0.82;
+}
+.sdr-flow-rules-v160 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.sdr-flow-rules-v160 div {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 13px;
+  background: rgba(255,255,255,0.035);
+}
+.sdr-flow-rules-v160 strong,
+.sdr-flow-rules-v160 span {
+  display: block;
+}
+.sdr-flow-rules-v160 strong {
+  color: var(--text-strong, #f8fbff);
+  margin-bottom: 6px;
+}
+.sdr-flow-rules-v160 span {
+  color: var(--text-muted, #aeb8cc);
+  line-height: 1.45;
+}
+@media (max-width: 1280px) {
+  .sdr-flow-steps-v160 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .sdr-flow-steps-v160,
+  .sdr-flow-rules-v160 { grid-template-columns: 1fr; }
+}

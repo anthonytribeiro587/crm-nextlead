@@ -77,11 +77,19 @@ Regras obrigatórias:
 - Use português brasileiro.
 - Não use markdown pesado; no máximo quebras de linha curtas.
 
-Roteiro recomendado:
-1. Se o lead só cumprimentou, pergunte qual é o tipo do negócio.
-2. Depois pergunte se ele já tem site, landing page ou usa só Instagram/WhatsApp.
-3. Depois pergunte se o objetivo é receber mais pedidos de orçamento pelo WhatsApp.
-4. Se houver interesse claro, classifique como quente e encaminhe para atendimento humano.`;
+Fluxo obrigatório do SDR:
+1. Saudação + contexto simples: explique que a Next Lead cria uma página simples para apresentar o serviço e levar o cliente ao WhatsApp.
+2. Perguntar tipo de negócio. Não avance sem entender minimamente o negócio.
+3. Perguntar presença atual: se já tem site/página ou se hoje usa Instagram/WhatsApp.
+4. Perguntar objetivo: se a pessoa quer receber mais pedidos de orçamento/clientes pelo WhatsApp.
+5. Perguntar momento: se quer ver uma sugestão/protótipo agora ou se está só pesquisando.
+6. Entregar para vendedor: quando houver negócio + objetivo confirmado, diga que alguém da equipe vai preparar uma sugestão/protótipo.
+
+Tratamento de respostas curtas:
+- Se responder “WhatsApp”, “Instagram” ou “só WhatsApp”, entenda como canal atual, não como objetivo confirmado.
+- Se responder “sim” após a pergunta de objetivo, confirme interesse e avance para urgência/protótipo.
+- Se responder “não” após a pergunta de objetivo, não repita a pergunta; explique que tudo bem e pergunte se quer apenas entender melhor ou encerrar.
+- Se responder “começar o quê?”, “não entendi” ou algo parecido, explique o que é o próximo passo antes de continuar.`;
 
 export const defaultSdrAutomation: Automation = {
   id: "sdr-nextlead-default",
@@ -407,6 +415,18 @@ function inferBusinessFromAnswer(text: string, contact?: Contact) {
 function lastOutboundQuestion(messages: Message[]) {
   return normalizeBasic(messages.filter((message) => message.direction === "outbound").at(-1)?.body || "");
 }
+function lastInboundCreatedAt(messages: Message[]) {
+  return messages.filter((message) => message.direction === "inbound").at(-1)?.createdAt || "";
+}
+
+function isShortYes(text: string) {
+  return isAffirmative(text) && normalizeBasic(text).length <= 18;
+}
+
+function isShortNo(text: string) {
+  return isNegative(text) && normalizeBasic(text).length <= 18;
+}
+
 
 function mapSdrStateRow(row: any): SdrState {
   return {
@@ -531,6 +551,18 @@ function computeSdrStateMachine(input: {
   const websiteFromAll = inferHasWebsite(allInboundText);
   const websiteQuestionWasAsked = hasAny(lastQuestion, ["site", "landing", "pagina", "página", "instagram/whatsapp"]);
   const normalizedLast = normalizeBasic(lastInbound);
+  const previousPhase = previousState?.phase || state.phase;
+
+  // Respostas curtas precisam ser interpretadas pela fase anterior, não pelo histórico inteiro.
+  // Isso evita o SDR voltar etapa ou repetir pergunta quando o lead responde “sim”, “não” ou “WhatsApp”.
+  if (previousPhase === "ask_presence") {
+    if (hasAny(normalizedLast, ["site", "landing", "pagina", "página", "tenho isso", "tenho sim"]) || (isShortYes(lastInbound) && hasAny(lastQuestion, ["site", "página", "pagina", "landing"]))) {
+      state.hasWebsite = "sim";
+    } else if (isShortNo(lastInbound) || hasAny(normalizedLast, ["instagram", "insta", "whatsapp", "zap", "so whatsapp", "só whatsapp", "uso whatsapp", "uso o whatsapp"])) {
+      state.hasWebsite = "nao";
+    }
+  }
+
   if (state.hasWebsite === "nao_informado" && websiteFromAll !== "nao_informado") state.hasWebsite = websiteFromAll;
   if (state.hasWebsite === "nao_informado" && websiteQuestionWasAsked) {
     if (isAffirmative(lastInbound) && hasAny(normalizedLast, ["tenho", "isso", "site", "landing"])) state.hasWebsite = "sim";
@@ -538,10 +570,15 @@ function computeSdrStateMachine(input: {
   }
 
   const wantsFromAll = inferWantsWhatsappLeads(allInboundText);
-  const goalQuestionWasAsked = hasAny(lastQuestion, ["orcamento direto no whatsapp", "orçamento direto no whatsapp", "pedidos de orçamento", "captar", "mais contatos", "mais clientes"]);
+  const goalQuestionWasAsked = hasAny(lastQuestion, ["orcamento direto no whatsapp", "orçamento direto no whatsapp", "pedidos de orçamento", "pedidos de orcamento", "captar", "mais contatos", "mais clientes", "esse e seu objetivo", "esse é seu objetivo"]);
+  if (previousPhase === "ask_goal" || previousPhase === "paused") {
+    if (isShortYes(lastInbound) || hasAny(normalizedLast, ["quero", "isso", "exatamente", "sim", "orcamento", "orçamento", "cliente", "lead", "mais contatos"])) state.wantsWhatsAppLeads = "sim";
+    else if (isShortNo(lastInbound)) state.wantsWhatsAppLeads = "nao";
+  }
+
   if (state.wantsWhatsAppLeads === "nao_informado" && wantsFromAll !== "nao_informado") state.wantsWhatsAppLeads = wantsFromAll;
   if (state.wantsWhatsAppLeads === "nao_informado" && goalQuestionWasAsked) {
-    if (isAffirmative(lastInbound) || hasAny(normalizedLast, ["whatsapp", "zap", "orcamento", "orçamento", "cliente", "lead"])) state.wantsWhatsAppLeads = "sim";
+    if (isAffirmative(lastInbound) || hasAny(normalizedLast, ["orcamento", "orçamento", "cliente", "lead", "mais contatos"])) state.wantsWhatsAppLeads = "sim";
     if (isNegative(lastInbound)) state.wantsWhatsAppLeads = "nao";
   }
 
@@ -593,8 +630,8 @@ function computeSdrStateMachine(input: {
     suggestedReply = `Perfeito, ${first}. Pelo que você me falou, faz sentido a gente te mostrar uma ideia/protótipo da página. Vou encaminhar para alguém da Next Lead te orientar e preparar uma sugestão para o seu negócio.`;
   } else {
     phase = "paused";
-    nextQuestion = "sem interesse confirmado";
-    suggestedReply = `Entendi, ${first}. Se em algum momento você quiser captar mais contatos pelo WhatsApp, a Next Lead pode te mostrar uma ideia simples para o seu negócio.`;
+    nextQuestion = "lead sem objetivo de captação confirmado";
+    suggestedReply = `Sem problema, ${first}. Só para eu não te direcionar errado: você quer apenas entender melhor como funciona a página, ou por enquanto não faz sentido captar orçamentos pelo WhatsApp?`;
     handoffReason = "Lead não confirmou interesse em captar orçamentos pelo WhatsApp.";
   }
 
@@ -1070,6 +1107,20 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
   }
 
   const stateLoad = await loadSdrState(supabase, tenant, contact.id);
+
+  if (input.source === "webhook" && stateLoad.state?.lastInboundText && compactText(stateLoad.state.lastInboundText).toLowerCase() === latestInboundText.toLowerCase()) {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      contact_id: contact.id,
+      deal_id: deal?.id || null,
+      status: "skipped",
+      summary: "SDR ignorou evento duplicado da mesma última mensagem recebida.",
+      input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText },
+      output: { state: stateLoad.state },
+    });
+    return { ok: true, skipped: true, mode, sent: false, reason: "Evento duplicado da última mensagem recebida." };
+  }
+
   const stateMachine = computeSdrStateMachine({ contact, deal, stage, pipeline, messages, previousState: stateLoad.state });
   let analysis = await polishSdrReplyWithGemini({ analysis: stateMachine.analysis, state: stateMachine.state, contact });
 

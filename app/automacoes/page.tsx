@@ -220,6 +220,30 @@ export default async function AutomacoesPage() {
         </aside>
       </section>
 
+
+      <section className="card standard-card-v14 sdr-flow-builder-v160">
+        <div className="dash-section-head compact">
+          <div>
+            <p className="eyebrow-small">Fluxo aparente do agente</p>
+            <h2>Como o SDR vai conduzir a conversa</h2>
+            <p className="muted">Esta é a trilha que o agente segue antes de entregar para um vendedor. O Gemini só deixa a frase natural; quem manda no caminho é este fluxo.</p>
+          </div>
+          <span className="status-pill success">ativo</span>
+        </div>
+        <div className="sdr-flow-steps-v160">
+          <article><span>1</span><strong>Entender o negócio</strong><p>Se o lead mandar “oi”, o agente explica a Next Lead em uma frase e pergunta o tipo de negócio.</p><small>Ex.: assistência de celular, lava rápido, academia, clínica.</small></article>
+          <article><span>2</span><strong>Presença atual</strong><p>Descobre se a pessoa já tem site/página ou se hoje usa Instagram e WhatsApp.</p><small>“WhatsApp” aqui é canal atual, não interesse confirmado.</small></article>
+          <article><span>3</span><strong>Objetivo</strong><p>Confirma se a ideia é receber mais pedidos de orçamento/clientes pelo WhatsApp.</p><small>Se responder “não”, o agente não repete: explica e pausa.</small></article>
+          <article><span>4</span><strong>Momento</strong><p>Entende se a pessoa quer ver uma sugestão/protótipo agora ou se está só pesquisando.</p><small>Ajuda a separar curioso de lead quente.</small></article>
+          <article><span>5</span><strong>Entrega para vendedor</strong><p>Quando qualificado, o SDR avisa que alguém da equipe vai orientar e preparar uma sugestão/protótipo.</p><small>Depois disso o SDR pausa para não brigar com humano.</small></article>
+        </div>
+        <div className="sdr-flow-rules-v160">
+          <div><strong>Quando o lead não entende</strong><span>Explica o que é uma página simples e o que significa ver um protótipo antes de continuar.</span></div>
+          <div><strong>Quando chega grupo ou promoção</strong><span>O webhook ignora grupos, broadcasts, figurinhas e mensagens sem texto.</span></div>
+          <div><strong>Quando um humano assume</strong><span>O agente pausa por segurança e deixa o vendedor conduzir.</span></div>
+        </div>
+      </section>
+
       <section className="card standard-card-v14 automation-history-v15">
         <div className="dash-section-head compact"><div><p className="eyebrow-small">Histórico</p><h2>Últimas execuções</h2><p className="muted">Toda ação do agente deve deixar rastro para auditoria e suporte.</p></div><PlayCircle size={20} /></div>
         <div className="table-wrap">
