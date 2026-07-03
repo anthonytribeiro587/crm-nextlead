@@ -580,6 +580,51 @@ async function saveMessageSafe(
   return supabase.from("messages").insert(minimal);
 }
 
+async function insertSdrDiagnosticRun(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  tenant: Awaited<ReturnType<typeof getTenantContext>>,
+  record: Record<string, any>,
+) {
+  const payload = {
+    tenant_id: tenant.tenantTableReady ? tenant.id : undefined,
+    automation_id: record.automation_id || null,
+    contact_id: record.contact_id || null,
+    deal_id: record.deal_id || null,
+    status: record.status || "started",
+    summary: record.summary || "SDR webhook diagnosticado.",
+    input: record.input || {},
+    output: record.output || {},
+    error: record.error || null,
+    created_at: new Date().toISOString(),
+  };
+
+  const clean = Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+  const first = await supabase.from("automation_runs").insert(clean).select("id").single();
+  if (!first.error) return { id: first.data?.id, error: null };
+
+  console.error("NextLead SDR diagnostic run insert failed", first.error.message);
+
+  const minimal = {
+    tenant_id: tenant.tenantTableReady ? tenant.id : undefined,
+    status: payload.status,
+    summary: payload.summary,
+    error: payload.error || first.error.message,
+    created_at: payload.created_at,
+  };
+  const second = await supabase
+    .from("automation_runs")
+    .insert(Object.fromEntries(Object.entries(minimal).filter(([, value]) => value !== undefined)))
+    .select("id")
+    .single();
+
+  if (second.error) {
+    console.error("NextLead SDR diagnostic minimal insert failed", second.error.message);
+    return { id: null, error: second.error };
+  }
+
+  return { id: second.data?.id, error: null };
+}
+
 export async function persistEvolutionWebhook(payload: any) {
   const supabase = getSupabaseAdmin();
   if (!supabase)
@@ -674,6 +719,19 @@ export async function persistEvolutionWebhook(payload: any) {
     );
     const providerMessageId = key?.id || item?.id || undefined;
 
+    await insertSdrDiagnosticRun(supabase, tenant, {
+      status: "started",
+      summary: "Webhook elegível para SDR; preparando contato e oportunidade.",
+      input: {
+        phone,
+        body: String(body || "").slice(0, 300),
+        messageType,
+        providerMessageId,
+        event: payload?.event || null,
+        source: "webhook_pre_contact",
+      },
+    });
+
     const contactResult = await upsertContactSafe(supabase, {
       phone,
       name: pushName || phone,
@@ -681,8 +739,15 @@ export async function persistEvolutionWebhook(payload: any) {
     }, tenant);
 
     if (contactResult.error || !contactResult.data?.id) {
+      const contactError = contactResult.error?.message || "sem id";
+      await insertSdrDiagnosticRun(supabase, tenant, {
+        status: "error",
+        summary: "SDR não conseguiu criar/encontrar contato a partir do webhook.",
+        input: { phone, body: String(body || "").slice(0, 300), source: "webhook_contact_error" },
+        error: contactError,
+      });
       errors.push(
-        `contact:${phone}:${contactResult.error?.message || "sem id"}`,
+        `contact:${phone}:${contactError}`,
       );
       continue;
     }
@@ -737,6 +802,13 @@ export async function persistEvolutionWebhook(payload: any) {
         }
       } catch (automationError) {
         const message = automationError instanceof Error ? automationError.message : "erro";
+        await insertSdrDiagnosticRun(supabase, tenant, {
+          status: "error",
+          summary: "SDR falhou durante execução automática do webhook.",
+          contact_id: contact.id,
+          input: { phone, contactId: contact.id, body: String(body || "").slice(0, 300), source: "webhook_automation_error" },
+          error: message,
+        });
         automationResults.push({ phone, contactId: contact.id, ok: false, error: message });
         console.error("NextLead SDR webhook error", message);
         errors.push(`automation:${phone}:${message}`);
