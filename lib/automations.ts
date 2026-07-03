@@ -413,7 +413,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
   }
 
   let contactResult = await applyTenantFilter(
-    supabase.from("contacts").select("id,tenant_id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at,created_at").eq("id", input.contactId).limit(1),
+    supabase.from("contacts").select("id,tenant_id,name,phone,email,company,source,temperature,tags,notes,last_message_at,created_at").eq("id", input.contactId).limit(1),
     tenant,
   ).maybeSingle();
 
@@ -423,7 +423,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
   if ((contactResult.error || !contactResult.data?.id) && tenant.tenantTableReady) {
     const fallbackContact = await supabase
       .from("contacts")
-      .select("id,tenant_id,name,phone,email,company,source,owner,temperature,tags,notes,last_message_at,created_at")
+      .select("id,tenant_id,name,phone,email,company,source,temperature,tags,notes,last_message_at,created_at")
       .eq("id", input.contactId)
       .limit(1)
       .maybeSingle();
