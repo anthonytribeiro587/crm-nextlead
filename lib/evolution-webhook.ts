@@ -8,6 +8,10 @@ function onlyDigits(value: unknown) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function compactText(value: unknown) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
 
 function rawJidFromItem(key: any, item: any) {
   const source = item?.data || item || {};
@@ -700,6 +704,25 @@ export async function persistEvolutionWebhook(payload: any) {
   const errors: string[] = [];
   const automationResults: any[] = [];
 
+  // A Evolution às vezes envia um lote com mensagens antigas + a mensagem nova.
+  // Salvar todas é ok, mas o SDR deve rodar só para a última mensagem elegível de cada contato.
+  // Isso evita o robô responder “fora de ordem” e repetir perguntas antigas.
+  const latestAutomationMarkerByPhone = new Map<string, string>();
+  messages.forEach((candidate, index) => {
+    const key = candidate?.key || candidate?.data?.key || {};
+    const chatCheck = shouldIgnoreChat(key, candidate);
+    if (chatCheck.ignore) return;
+    const phone = phoneFromKey(key, candidate);
+    if (!phone) return;
+    const fromMe = parseFromMe(key?.fromMe) || parseFromMe(candidate?.fromMe) || parseFromMe(candidate?.data?.key?.fromMe) || parseFromMe(candidate?.data?.fromMe);
+    if (fromMe) return;
+    const messageType = candidate?.messageType || candidate?.type || Object.keys(candidate?.message || {})[0] || "text";
+    const body = extractText(candidate, messageType);
+    if (!compactText(body) || String(body).startsWith("[")) return;
+    const providerMessageId = key?.id || candidate?.id || `idx-${index}`;
+    latestAutomationMarkerByPhone.set(phone, String(providerMessageId));
+  });
+
   for (const item of messages) {
     const key = item?.key || item?.data?.key || {};
     const chatCheck = shouldIgnoreChat(key, item);
@@ -741,6 +764,7 @@ export async function persistEvolutionWebhook(payload: any) {
         item?.date_time,
     );
     const providerMessageId = key?.id || item?.id || undefined;
+    const automationMarker = String(providerMessageId || "");
 
     if (isSdrVerboseDiagnosticsEnabled()) await insertSdrDiagnosticRun(supabase, tenant, {
       status: "started",
@@ -840,7 +864,13 @@ export async function persistEvolutionWebhook(payload: any) {
       saved += 1;
     }
 
-    if (!fromMe) {
+    const shouldRunAutomationForThisItem = !fromMe && compactText(body) && !String(body).startsWith("[") && (!latestAutomationMarkerByPhone.get(phone) || latestAutomationMarkerByPhone.get(phone) === automationMarker);
+
+    if (!fromMe && !shouldRunAutomationForThisItem) {
+      skipped += 1;
+    }
+
+    if (shouldRunAutomationForThisItem) {
       try {
         if (isSdrVerboseDiagnosticsEnabled()) await insertSdrDiagnosticRun(supabase, tenant, {
           status: "started",
@@ -851,7 +881,7 @@ export async function persistEvolutionWebhook(payload: any) {
         await ensureDefaultAutomations(supabase, tenant);
         const debugStart = { phone, contactId: contact.id, tenantId: tenant.id, body: String(body || "").slice(0, 80), providerMessageId, dealReady, messageSaved: !messageResult.error };
         console.info("NextLead SDR webhook start", JSON.stringify(debugStart).slice(0, 1000));
-        const automationResult = await runSdrAutomationForContact({ contactId: contact.id, tenant, source: "webhook" });
+        const automationResult = await runSdrAutomationForContact({ contactId: contact.id, tenant, source: "webhook", inboundMessageId: providerMessageId, latestInboundText: body });
         automationResults.push({ phone, contactId: contact.id, ...automationResult });
         console.info("NextLead SDR webhook result", JSON.stringify({ phone, contactId: contact.id, ...automationResult }).slice(0, 2200));
         if (!automationResult?.ok) {

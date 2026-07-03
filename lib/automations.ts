@@ -631,7 +631,7 @@ function computeSdrStateMachine(input: {
   } else {
     phase = "paused";
     nextQuestion = "lead sem objetivo de captação confirmado";
-    suggestedReply = `Sem problema, ${first}. Só para eu não te direcionar errado: você quer apenas entender melhor como funciona a página, ou por enquanto não faz sentido captar orçamentos pelo WhatsApp?`;
+    suggestedReply = `Sem problema, ${first}. Então não vou insistir. Se quiser, posso só te explicar rapidamente como funciona uma página da Next Lead para captar contatos pelo WhatsApp.`;
     handoffReason = "Lead não confirmou interesse em captar orçamentos pelo WhatsApp.";
   }
 
@@ -914,14 +914,18 @@ async function hasRecentHumanTakeover(
   });
 }
 
-function shouldSkipBecauseRecentRun(runs: any[], mode: AutomationMode, latestInboundText?: string) {
+function shouldSkipBecauseRecentRun(runs: any[], mode: AutomationMode, latestInboundText?: string, inboundMessageId?: string) {
   if (mode !== "auto") return false;
   const cooldownSeconds = Number(process.env.NEXTLEAD_AUTO_SDR_COOLDOWN_SECONDS || 8);
   const cooldownMs = Math.max(3, cooldownSeconds) * 1000;
   const now = Date.now();
   const latest = compactText(latestInboundText || "").toLowerCase();
+  const inboundId = compactText(inboundMessageId || "");
 
   return (runs || []).some((run) => {
+    const previousInboundId = compactText(run.input?.inboundMessageId || run.output?.inboundMessageId || "");
+    if (inboundId && previousInboundId && inboundId === previousInboundId) return true;
+
     const created = new Date(run.created_at || 0).getTime();
     if (!created || Number.isNaN(created)) return false;
     if (now - created >= cooldownMs || String(run.status || "") !== "success") return false;
@@ -931,7 +935,7 @@ function shouldSkipBecauseRecentRun(runs: any[], mode: AutomationMode, latestInb
     if (latest && previousInbound && latest === previousInbound) return true;
 
     // Para runs antigos sem latestInboundText, mantém uma trava curtíssima para evitar resposta dupla.
-    return !previousInbound && now - created < 3000;
+    return !previousInbound && now - created < 2500;
   });
 }
 
@@ -940,6 +944,8 @@ export type RunSdrAutomationInput = {
   tenant?: TenantContext;
   requestedMode?: AutomationMode;
   source?: "manual" | "webhook";
+  inboundMessageId?: string;
+  latestInboundText?: string;
 };
 
 export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
@@ -1083,7 +1089,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
     tenant,
   );
   const messages = (messagesResult.data || []).map(mapMessageRow).reverse();
-  const latestInboundText = compactText(messages.filter((message) => message.direction === "inbound").at(-1)?.body || "");
+  const latestInboundText = compactText(input.latestInboundText || messages.filter((message) => message.direction === "inbound").at(-1)?.body || "");
 
   const recentRuns = await applyTenantFilter(
     supabase
@@ -1095,13 +1101,13 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
     tenant,
   );
 
-  if (shouldSkipBecauseRecentRun(recentRuns.data || [], mode, latestInboundText)) {
+  if (shouldSkipBecauseRecentRun(recentRuns.data || [], mode, latestInboundText, input.inboundMessageId)) {
     await insertAutomationRun(supabase, tenant, {
       automation_id: automation?.id || automationId,
       contact_id: contact.id,
       status: "skipped",
       summary: "SDR automático ignorado por evento duplicado/cooldown curto.",
-      input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText },
+      input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText, inboundMessageId: input.inboundMessageId },
     });
     return { ok: true, skipped: true, mode, sent: false, reason: "Cooldown anti-duplicidade curto." };
   }
@@ -1115,7 +1121,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
       deal_id: deal?.id || null,
       status: "skipped",
       summary: "SDR ignorou evento duplicado da mesma última mensagem recebida.",
-      input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText },
+      input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText, inboundMessageId: input.inboundMessageId },
       output: { state: stateLoad.state },
     });
     return { ok: true, skipped: true, mode, sent: false, reason: "Evento duplicado da última mensagem recebida." };
@@ -1232,8 +1238,8 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
     deal_id: deal?.id || null,
     status: "success",
     summary: sent ? "IA SDR respondeu automaticamente." : "IA SDR gerou sugestão de atendimento.",
-    input: { contactId: contact.id, mode, source: input.source || "manual", latestInboundText },
-    output: { ...analysis, autoSendEnabled: isAutoSdrGloballyEnabled(), providerMessageId, latestInboundText },
+    input: { contactId: contact.id, mode, source: input.source || "manual", latestInboundText, inboundMessageId: input.inboundMessageId },
+    output: { ...analysis, autoSendEnabled: isAutoSdrGloballyEnabled(), providerMessageId, latestInboundText, inboundMessageId: input.inboundMessageId },
   });
 
   if (automation?.id) {
