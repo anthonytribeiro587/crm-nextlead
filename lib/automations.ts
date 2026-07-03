@@ -523,15 +523,16 @@ function computeSdrStateMachine(input: {
   const { contact, deal, stage, pipeline, messages, previousState } = input;
   const inbound = messages.filter((message) => message.direction === "inbound");
   const lastInbound = compactText(inbound.at(-1)?.body || "");
-  const allInboundText = compactText(inbound.map((message) => message.body).join("\n"));
-  const allText = compactText(messages.map((message) => `${message.direction}: ${message.body}`).join("\n"));
-  const lastQuestion = lastOutboundQuestion(messages);
+  const normalizedLast = normalizeBasic(lastInbound);
   const first = compactText(contact?.name).split(" ")[0] || "tudo bem";
+  const previousPhase = previousState?.phase || "ask_business";
 
+  // Versão determinística: o estado salvo manda no fluxo. O histórico antigo só é usado
+  // como apoio inicial, para não puxar respostas antigas e confundir a conversa atual.
   const state: SdrState = {
     contactId: contact?.id || previousState?.contactId || "",
     dealId: deal?.id || previousState?.dealId,
-    phase: previousState?.phase || "ask_business",
+    phase: previousPhase,
     businessType: previousState?.businessType,
     hasWebsite: previousState?.hasWebsite || "nao_informado",
     currentChannels: previousState?.currentChannels || [],
@@ -543,109 +544,129 @@ function computeSdrStateMachine(input: {
     id: previousState?.id,
   };
 
-  const inferredBusiness = inferBusinessType(allInboundText, contact) || inferBusinessFromAnswer(lastInbound, contact);
-  if (!state.businessType && inferredBusiness) state.businessType = inferredBusiness;
-
-  const channels = new Set([...(state.currentChannels || []), ...inferChannels(allInboundText)]);
-  state.currentChannels = Array.from(channels);
-
-  const websiteFromAll = inferHasWebsite(allInboundText);
-  const websiteQuestionWasAsked = hasAny(lastQuestion, ["site", "landing", "pagina", "página", "instagram/whatsapp"]);
-  const normalizedLast = normalizeBasic(lastInbound);
-  const previousPhase = previousState?.phase || state.phase;
-
-  // Respostas curtas precisam ser interpretadas pela fase anterior, não pelo histórico inteiro.
-  // Isso evita o SDR voltar etapa ou repetir pergunta quando o lead responde “sim”, “não” ou “WhatsApp”.
-  if (previousPhase === "ask_presence") {
-    if (hasAny(normalizedLast, ["site", "landing", "pagina", "página", "tenho isso", "tenho sim"]) || (isShortYes(lastInbound) && hasAny(lastQuestion, ["site", "página", "pagina", "landing"]))) {
-      state.hasWebsite = "sim";
-    } else if (isShortNo(lastInbound) || hasAny(normalizedLast, ["instagram", "insta", "whatsapp", "zap", "so whatsapp", "só whatsapp", "uso whatsapp", "uso o whatsapp"])) {
-      state.hasWebsite = "nao";
-    }
+  const channelsFromLatest = inferChannels(lastInbound);
+  if (channelsFromLatest.length) {
+    state.currentChannels = Array.from(new Set([...(state.currentChannels || []), ...channelsFromLatest]));
   }
 
-  if (state.hasWebsite === "nao_informado" && websiteFromAll !== "nao_informado") state.hasWebsite = websiteFromAll;
-  if (state.hasWebsite === "nao_informado" && websiteQuestionWasAsked) {
-    if (isAffirmative(lastInbound) && hasAny(normalizedLast, ["tenho", "isso", "site", "landing"])) state.hasWebsite = "sim";
-    if (isNegative(lastInbound) || hasAny(normalizedLast, ["instagram", "insta", "whatsapp", "zap"])) state.hasWebsite = "nao";
-  }
+  const baseSummary = () => [
+    `${contact?.name || "Lead"} está em ${pipeline?.name || "funil não definido"}${stage?.title ? ` / ${stage.title}` : ""}.`,
+    state.businessType ? `Negócio: ${state.businessType}.` : "Negócio ainda não identificado.",
+    state.hasWebsite === "nao_informado" ? "Site/landing ainda não informado." : state.hasWebsite === "sim" ? "Já indicou ter site/landing." : "Ainda não tem site/landing clara.",
+    state.wantsWhatsAppLeads === "sim" ? "Quer captar pelo WhatsApp." : state.wantsWhatsAppLeads === "nao" ? "Não confirmou interesse em WhatsApp." : "Interesse em WhatsApp ainda não confirmado.",
+    `Fase SDR: ${state.phase}.`,
+  ].join(" ");
 
-  const wantsFromAll = inferWantsWhatsappLeads(allInboundText);
-  const goalQuestionWasAsked = hasAny(lastQuestion, ["orcamento direto no whatsapp", "orçamento direto no whatsapp", "pedidos de orçamento", "pedidos de orcamento", "captar", "mais contatos", "mais clientes", "esse e seu objetivo", "esse é seu objetivo"]);
-  if (previousPhase === "ask_goal" || previousPhase === "paused") {
-    if (isShortYes(lastInbound) || hasAny(normalizedLast, ["quero", "isso", "exatamente", "sim", "orcamento", "orçamento", "cliente", "lead", "mais contatos"])) state.wantsWhatsAppLeads = "sim";
-    else if (isShortNo(lastInbound)) state.wantsWhatsAppLeads = "nao";
-  }
-
-  if (state.wantsWhatsAppLeads === "nao_informado" && wantsFromAll !== "nao_informado") state.wantsWhatsAppLeads = wantsFromAll;
-  if (state.wantsWhatsAppLeads === "nao_informado" && goalQuestionWasAsked) {
-    if (isAffirmative(lastInbound) || hasAny(normalizedLast, ["orcamento", "orçamento", "cliente", "lead", "mais contatos"])) state.wantsWhatsAppLeads = "sim";
-    if (isNegative(lastInbound)) state.wantsWhatsAppLeads = "nao";
-  }
-
-  const urgencyFromAll = inferUrgency(allInboundText);
-  const urgencyQuestionWasAsked = hasAny(lastQuestion, ["urgencia", "urgência", "pesquisando", "quando", "comecar", "começar"]);
-  if (state.urgency === "nao_informado" && urgencyFromAll !== "nao_informado") state.urgency = urgencyFromAll;
-  if (state.urgency === "nao_informado" && urgencyQuestionWasAsked) {
-    if (hasAny(normalizedLast, ["agora", "rapido", "urgente", "essa semana", "quanto antes", "logo"])) state.urgency = "alta";
-    else if (hasAny(normalizedLast, ["pesquisando", "sem pressa", "futuro", "mais pra frente"])) state.urgency = "baixa";
-    else if (lastInbound) state.urgency = "media";
-  }
-
-  let phase: SdrPhase = "ask_business";
-  let nextQuestion = "qual é o tipo do seu negócio?";
   let suggestedReply = `Oi, ${first}! Aqui é da Next Lead. A gente cria uma página simples para apresentar seu serviço e levar clientes direto para o WhatsApp. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
+  let nextQuestion = "qual é o tipo do seu negócio?";
   let shouldHandoff = false;
   let handoffReason = "Ainda faltam informações para qualificar o lead.";
-  const confused = isConfusionMessage(lastInbound);
 
-  if (state.handoffReady || state.phase === "handoff") {
-    phase = "handoff";
-    shouldHandoff = true;
-    handoffReason = "Lead já foi entregue para atendimento humano.";
-    suggestedReply = `Perfeito, ${first}. Já encaminhei seu atendimento para a equipe da Next Lead te orientar por aqui.`;
-    nextQuestion = "aguardar atendimento humano";
-  } else if (!state.businessType) {
-    phase = "ask_business";
-  } else if (state.hasWebsite === "nao_informado") {
-    phase = "ask_presence";
+  const setAskBusiness = () => {
+    state.phase = "ask_business";
+    nextQuestion = "qual é o tipo do seu negócio?";
+    suggestedReply = `Oi, ${first}! Aqui é da Next Lead. A gente cria uma página simples para apresentar seu serviço e levar clientes direto para o WhatsApp. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
+  };
+
+  const setAskPresence = () => {
+    state.phase = "ask_presence";
     nextQuestion = "hoje você já tem uma página/site, ou atende mais pelo Instagram e WhatsApp?";
     suggestedReply = `Legal, ${first}. Pra eu entender seu momento: hoje você já tem uma página/site, ou atende mais pelo Instagram e WhatsApp?`;
-  } else if (state.wantsWhatsAppLeads === "nao_informado") {
-    phase = "ask_goal";
-    nextQuestion = "seu objetivo é receber mais pedidos de orçamento direto no WhatsApp?";
+  };
+
+  const setAskGoal = () => {
+    state.phase = "ask_goal";
+    nextQuestion = "você quer receber mais pedidos de orçamento/clientes pelo WhatsApp?";
     suggestedReply = state.hasWebsite === "sim"
-      ? `Entendi. A ideia seria usar essa página para gerar mais pedidos de orçamento no WhatsApp. Esse é seu objetivo?`
-      : `Entendi. Então a ideia seria criar uma página simples para apresentar seu serviço e trazer mais pedidos de orçamento no WhatsApp. Esse é seu objetivo?`;
-  } else if (state.wantsWhatsAppLeads === "sim" && state.urgency === "nao_informado") {
-    phase = "ask_urgency";
-    nextQuestion = "você quer ver uma sugestão/protótipo agora ou está só pesquisando por enquanto?";
-    suggestedReply = `Boa. O próximo passo seria alguém da Next Lead montar uma sugestão/protótipo para você visualizar. Você quer ver isso agora ou está só pesquisando por enquanto?`;
-  } else if (state.wantsWhatsAppLeads === "sim") {
-    phase = "handoff";
-    shouldHandoff = true;
+      ? `Entendi. A ideia seria melhorar essa presença para gerar mais pedidos de orçamento no WhatsApp. Esse é seu objetivo?`
+      : `Entendi. Uma página simples pode apresentar seu serviço e facilitar pedidos de orçamento pelo WhatsApp. Você quer usar isso para receber mais clientes/orçamentos?`;
+  };
+
+  const setAskUrgency = () => {
+    state.phase = "ask_urgency";
+    nextQuestion = "você quer ver uma sugestão/protótipo agora ou está só pesquisando?";
+    suggestedReply = `Boa, ${first}. Quer que a gente prepare uma ideia/protótipo da página para você visualizar agora, ou está só pesquisando por enquanto?`;
+  };
+
+  const setPaused = () => {
+    state.phase = "paused";
+    nextQuestion = "aguardar novo interesse do lead";
+    handoffReason = "Lead não confirmou interesse em captar orçamentos pelo WhatsApp.";
+    suggestedReply = `Sem problema, ${first}. Não vou insistir. Se quiser, posso só te explicar rapidinho como uma página da Next Lead ajuda a levar clientes para o WhatsApp.`;
+  };
+
+  const setHandoff = () => {
+    state.phase = "handoff";
     state.handoffReady = true;
     state.handoffAt = state.handoffAt || new Date().toISOString();
+    shouldHandoff = true;
+    handoffReason = "Lead informou negócio e interesse em captar contatos/orçamentos pelo WhatsApp.";
     nextQuestion = "vendedor deve enviar protótipo/sugestão";
-    handoffReason = "Lead informou negócio e interesse em captar orçamentos pelo WhatsApp.";
-    suggestedReply = `Perfeito, ${first}. Pelo que você me falou, faz sentido a gente te mostrar uma ideia/protótipo da página. Vou encaminhar para alguém da Next Lead te orientar e preparar uma sugestão para o seu negócio.`;
-  } else {
-    phase = "paused";
-    nextQuestion = "lead sem objetivo de captação confirmado";
-    suggestedReply = `Sem problema, ${first}. Então não vou insistir. Se quiser, posso só te explicar rapidamente como funciona uma página da Next Lead para captar contatos pelo WhatsApp.`;
-    handoffReason = "Lead não confirmou interesse em captar orçamentos pelo WhatsApp.";
-  }
+    suggestedReply = `Perfeito, ${first}. Pelo que você me falou, faz sentido a equipe da Next Lead preparar uma ideia/protótipo da página para o seu negócio. Vou encaminhar para alguém te orientar por aqui.`;
+  };
 
-  if (confused && !state.handoffReady) {
-    const explainPhase = state.phase === "handoff" ? phase : (previousState?.phase || phase);
-    phase = explainPhase === "paused" ? "ask_goal" : explainPhase;
-    suggestedReply = educationalReplyForPhase(phase, first, state);
+  const confused = isConfusionMessage(lastInbound);
+  if (state.handoffReady || previousPhase === "handoff") {
+    setHandoff();
+    suggestedReply = `Perfeito, ${first}. Já encaminhei seu atendimento para a equipe da Next Lead te orientar por aqui.`;
+  } else if (confused) {
+    suggestedReply = educationalReplyForPhase(previousPhase, first, state);
+    state.phase = previousPhase === "paused" ? "ask_goal" : previousPhase;
     nextQuestion = suggestedReply.includes("?") ? suggestedReply.slice(suggestedReply.lastIndexOf(".") + 1).trim() || nextQuestion : nextQuestion;
-    shouldHandoff = false;
-    handoffReason = "Lead pediu explicação; SDR deve simplificar antes de avançar.";
+  } else if (previousPhase === "ask_business") {
+    const business = inferBusinessFromAnswer(lastInbound, contact) || inferBusinessType(lastInbound, contact);
+    if (business) {
+      state.businessType = business;
+      setAskPresence();
+    } else {
+      setAskBusiness();
+    }
+  } else if (previousPhase === "ask_presence") {
+    const website = inferHasWebsite(lastInbound);
+    if (website === "sim") {
+      state.hasWebsite = "sim";
+      setAskGoal();
+    } else if (website === "nao" || isNegative(lastInbound) || channelsFromLatest.length > 0) {
+      state.hasWebsite = "nao";
+      setAskGoal();
+    } else if (isShortYes(lastInbound)) {
+      state.hasWebsite = "sim";
+      setAskGoal();
+    } else {
+      setAskPresence();
+    }
+  } else if (previousPhase === "ask_goal") {
+    const wants = inferWantsWhatsappLeads(lastInbound);
+    if (wants === "sim" || isAffirmative(lastInbound)) {
+      state.wantsWhatsAppLeads = "sim";
+      setAskUrgency();
+    } else if (wants === "nao" || isNegative(lastInbound)) {
+      state.wantsWhatsAppLeads = "nao";
+      setPaused();
+    } else {
+      setAskGoal();
+    }
+  } else if (previousPhase === "ask_urgency") {
+    const urgency = inferUrgency(lastInbound);
+    if (urgency !== "nao_informado") state.urgency = urgency;
+    else if (isAffirmative(lastInbound) || hasAny(normalizedLast, ["quero", "ver", "pode", "agora", "protótipo", "prototipo", "sugestao", "sugestão"])) state.urgency = "media";
+    else if (isNegative(lastInbound) || hasAny(normalizedLast, ["pesquisando", "depois", "mais pra frente", "sem pressa"])) {
+      state.urgency = "baixa";
+      setPaused();
+    }
+
+    if (state.phase !== "paused") setHandoff();
+  } else if (previousPhase === "paused") {
+    if (isAffirmative(lastInbound) || hasAny(normalizedLast, ["quero", "orcamento", "orçamento", "cliente", "whatsapp", "protótipo", "prototipo", "sugestao", "sugestão"])) {
+      state.wantsWhatsAppLeads = "sim";
+      setAskUrgency();
+    } else {
+      setPaused();
+    }
+  } else {
+    setAskBusiness();
   }
 
-  state.phase = phase;
   const temperature: LeadTemperature = shouldHandoff
     ? "quente"
     : state.wantsWhatsAppLeads === "sim"
@@ -654,23 +675,15 @@ function computeSdrStateMachine(input: {
         ? "morno"
         : "frio";
 
-  const summaryParts = [
-    `${contact?.name || "Lead"} está em ${pipeline?.name || "funil não definido"}${stage?.title ? ` / ${stage.title}` : ""}.`,
-    state.businessType ? `Negócio: ${state.businessType}.` : "Negócio ainda não identificado.",
-    state.hasWebsite === "nao_informado" ? "Site/landing ainda não informado." : state.hasWebsite === "sim" ? "Já indicou ter site/landing." : "Ainda não tem site/landing clara.",
-    state.wantsWhatsAppLeads === "sim" ? "Quer captar pelo WhatsApp." : state.wantsWhatsAppLeads === "nao" ? "Não confirmou interesse em WhatsApp." : "Interesse em WhatsApp ainda não confirmado.",
-    `Fase SDR: ${phase}.`,
-  ];
-
   return {
     state,
-    shouldPauseAfterHandoff: phase === "handoff",
+    shouldPauseAfterHandoff: state.phase === "handoff",
     analysis: {
-      summary: summaryParts.join(" "),
+      summary: baseSummary(),
       suggestedReply: forceOneQuestion(suggestedReply),
       nextQuestion,
       temperature,
-      suggestedStageHint: shouldHandoff ? "Briefing recebido / Diagnóstico" : phase === "ask_presence" ? "Contato feito" : "Novo lead",
+      suggestedStageHint: shouldHandoff ? "Briefing recebido / Diagnóstico" : state.phase === "ask_presence" ? "Contato feito" : "Novo lead",
       shouldHandoff,
       handoffReason,
       extracted: {
@@ -680,102 +693,6 @@ function computeSdrStateMachine(input: {
         urgency: state.urgency === "nao_informado" ? "media" : state.urgency,
       },
     },
-  };
-}
-
-async function polishSdrReplyWithGemini(input: { analysis: SdrAnalysis; state: SdrState; contact?: Contact }) {
-  // Por estabilidade comercial, o automático usa as mensagens determinísticas do fluxo.
-  // O Gemini pode ser ligado para lapidar texto, mas só é aceito se passar nas travas abaixo.
-  const allowPolish = String(process.env.NEXTLEAD_SDR_USE_GEMINI_POLISH || "").toLowerCase() === "true";
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey || !allowPolish) return input.analysis;
-
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const prompt = `Reescreva a mensagem abaixo como WhatsApp comercial da Next Lead, sem mudar o objetivo nem a pergunta.
-
-Regras obrigatórias:
-- Nunca diga que é IA.
-- Não invente preço, prazo ou garantia.
-- Mantenha exatamente uma pergunta, se a mensagem base tiver pergunta.
-- Máximo 3 linhas.
-- Não corte a frase. A resposta deve terminar com ponto, interrogação ou exclamação.
-- Use linguagem simples para leigos.
-
-Fase: ${input.state.phase}
-Mensagem base: ${input.analysis.suggestedReply}
-
-Responda somente a mensagem final.`;
-
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.15, maxOutputTokens: 160 },
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    const text = payload?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join(" ").trim();
-    const polished = forceOneQuestion(text || "");
-    if (!response.ok || !polished || isIncompleteSdrReply(polished)) return input.analysis;
-    return {
-      ...input.analysis,
-      suggestedReply: polished,
-      geminiUsage: {
-        promptTokenCount: payload?.usageMetadata?.promptTokenCount,
-        candidatesTokenCount: payload?.usageMetadata?.candidatesTokenCount,
-        totalTokenCount: payload?.usageMetadata?.totalTokenCount,
-      },
-    } as SdrAnalysis;
-  } catch {
-    return input.analysis;
-  }
-}
-
-
-function mapContactRow(row: any): Contact {
-  return {
-    id: row.id,
-    name: row.name,
-    phone: row.phone,
-    email: row.email || undefined,
-    company: row.company || undefined,
-    source: row.source || "WhatsApp",
-    owner: row.owner || "NextLead",
-    temperature: row.temperature || "morno",
-    tags: Array.isArray(row.tags) ? row.tags : [],
-    lastMessageAt: row.last_message_at || row.created_at || new Date().toISOString(),
-    notes: row.notes || undefined,
-  };
-}
-
-function mapDealRow(row: any): Deal {
-  return {
-    id: row.id,
-    contactId: row.contact_id,
-    title: row.title || "Oportunidade",
-    value: Number(row.value || 0),
-    pipelineId: row.pipeline_id || undefined,
-    stageId: row.stage_id,
-    status: row.status || "aberto",
-    expectedClose: row.expected_close || undefined,
-    lostReason: row.lost_reason || undefined,
-    createdAt: row.created_at || new Date().toISOString(),
-    updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
-  };
-}
-
-function mapMessageRow(row: any): Message {
-  return {
-    id: row.id,
-    contactId: row.contact_id,
-    direction: row.direction,
-    body: row.body,
-    status: row.status || "received",
-    createdAt: row.created_at || new Date().toISOString(),
-    providerMessageId: row.provider_message_id || undefined,
-    type: row.type || "text",
   };
 }
 
@@ -965,6 +882,61 @@ function shouldSkipBecauseRecentRun(runs: any[], mode: AutomationMode, latestInb
     // Para runs antigos sem latestInboundText, mantém uma trava curtíssima para evitar resposta dupla.
     return !previousInbound && now - created < 2500;
   });
+}
+
+
+function mapContactRow(row: any): Contact {
+  return {
+    id: row.id,
+    name: row.name || "Lead",
+    phone: row.phone || "",
+    email: row.email || undefined,
+    company: row.company || undefined,
+    source: row.source || "WhatsApp",
+    owner: "NextLead",
+    temperature: (row.temperature || "frio") as LeadTemperature,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    notes: row.notes || undefined,
+    lastMessageAt: row.last_message_at || row.created_at || new Date().toISOString(),
+  };
+}
+
+function mapDealRow(row: any): Deal {
+  return {
+    id: row.id,
+    contactId: row.contact_id,
+    pipelineId: row.pipeline_id || undefined,
+    stageId: row.stage_id,
+    title: row.title || "Oportunidade",
+    value: Number(row.value || 0),
+    status: (row.status || "aberto") as any,
+    expectedClose: row.expected_close || undefined,
+    lostReason: row.lost_reason || undefined,
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || undefined,
+  };
+}
+
+function mapMessageRow(row: any): Message {
+  return {
+    id: row.id,
+    contactId: row.contact_id,
+    direction: row.direction || "inbound",
+    body: row.body || "",
+    status: row.status || "received",
+    type: row.type || "text",
+    providerMessageId: row.provider_message_id || undefined,
+    createdAt: row.created_at || new Date().toISOString(),
+  };
+}
+
+async function polishSdrReplyWithGemini(input: { analysis: SdrAnalysis; state: SdrState; contact?: Contact }): Promise<SdrAnalysis> {
+  // Estabilidade > criatividade. Por padrão, o SDR usa o texto determinístico do fluxo.
+  // Para testes futuros, pode ativar NEXTLEAD_SDR_USE_GEMINI_POLISH=true.
+  if (String(process.env.NEXTLEAD_SDR_USE_GEMINI_POLISH || "").toLowerCase() !== "true") {
+    return input.analysis;
+  }
+  return input.analysis;
 }
 
 export type RunSdrAutomationInput = {
