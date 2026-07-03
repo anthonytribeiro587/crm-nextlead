@@ -540,17 +540,36 @@ async function upsertContactSafe(
   if (!result.error && result.data?.id) return result;
 
   // Fallback para bancos antigos sem algumas colunas extras.
-  const fallbackPayload = {
+  // IMPORTANTE: não usar upsert/onConflict aqui. Alguns bancos antigos não têm
+  // constraint unique em phone ou tenant_id+phone, então o Postgres retorna:
+  // "there is no unique or exclusion constraint matching the ON CONFLICT specification".
+  // Como já buscamos o contato antes, fazemos insert mínimo; se falhar, tentamos
+  // buscar novamente para lidar com corrida/conflito sem quebrar o SDR.
+  const fallbackPayload = withTenant({
     phone: input.phone,
     name: input.name || input.phone,
     company: null,
-  };
+  }, tenant || await getTenantContext());
 
   result = await supabase
     .from("contacts")
-    .upsert(fallbackPayload, { onConflict: "phone" })
+    .insert(fallbackPayload)
     .select("id,name")
     .single();
+
+  if (!result.error && result.data?.id) return result;
+
+  const retry = await supabase
+    .from("contacts")
+    .select("id,name,phone")
+    .in("phone", variants.length ? variants : [input.phone])
+    .limit(1)
+    .maybeSingle();
+
+  if (!retry.error && retry.data?.id) {
+    return { data: { id: retry.data.id, name: retry.data.name }, error: null } as any;
+  }
+
   return result;
 }
 
