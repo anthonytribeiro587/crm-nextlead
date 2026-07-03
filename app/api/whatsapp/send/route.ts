@@ -58,7 +58,7 @@ async function saveOutboundMessage(input: {
     if (!resolvedContactId) {
       const { data: contact } = await supabase
         .from("contacts")
-        .upsert({ phone: input.to, name: input.to, source: "WhatsApp", owner: "NextLead", updated_at: new Date().toISOString() }, { onConflict: "phone" })
+        .insert({ phone: input.to, name: input.to, source: "WhatsApp", updated_at: new Date().toISOString() })
         .select("id")
         .single();
       resolvedContactId = contact?.id;
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
 
   if (provider === "demo") {
     const providerMessageId = `local-${Date.now()}`;
-    await saveOutboundMessage({ to, contactId, message, status: "queued", providerMessageId, provider: "demo", rawPayload: { demo: true } });
+    await saveOutboundMessage({ to, contactId, message, status: "queued", providerMessageId, provider: "demo", rawPayload: { demo: true, source: "manual_crm" } });
     return NextResponse.json({ ok: true, demo: true, provider: "demo", providerMessageId, message: "Mensagem salva no CRM. Configure a Evolution API para envio real." });
   }
 
@@ -136,11 +136,11 @@ export async function POST(request: NextRequest) {
       status: "sent",
       providerMessageId: result.providerMessageId,
       provider: result.provider,
-      rawPayload: result.payload,
+      rawPayload: { ...(result.payload || {}), source: "manual_crm" },
     });
     return NextResponse.json({ ok: true, provider: result.provider, providerMessageId: result.providerMessageId, result: result.payload });
   } catch (error: any) {
-    await saveOutboundMessage({ to, contactId, message, status: "failed", provider, rawPayload: { error: error.message } });
+    await saveOutboundMessage({ to, contactId, message, status: "failed", provider, rawPayload: { error: error.message, source: "manual_crm" } });
     return NextResponse.json({ error: error.message || "Erro ao enviar mensagem." }, { status: 500 });
   }
 }

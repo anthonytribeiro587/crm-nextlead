@@ -644,6 +644,10 @@ async function insertSdrDiagnosticRun(
   return { id: second.data?.id, error: null };
 }
 
+function isSdrVerboseDiagnosticsEnabled() {
+  return String(process.env.NEXTLEAD_SDR_VERBOSE_LOGS || "").toLowerCase() === "true";
+}
+
 export async function persistEvolutionWebhook(payload: any) {
   const supabase = getSupabaseAdmin();
   if (!supabase)
@@ -738,7 +742,7 @@ export async function persistEvolutionWebhook(payload: any) {
     );
     const providerMessageId = key?.id || item?.id || undefined;
 
-    await insertSdrDiagnosticRun(supabase, tenant, {
+    if (isSdrVerboseDiagnosticsEnabled()) await insertSdrDiagnosticRun(supabase, tenant, {
       status: "started",
       summary: "Webhook elegível para SDR; preparando contato e oportunidade.",
       input: {
@@ -773,7 +777,7 @@ export async function persistEvolutionWebhook(payload: any) {
 
     const contact = contactResult.data;
 
-    await insertSdrDiagnosticRun(supabase, tenant, {
+    if (isSdrVerboseDiagnosticsEnabled()) await insertSdrDiagnosticRun(supabase, tenant, {
       status: "started",
       summary: "SDR encontrou/criou contato; salvando mensagem e preparando automação.",
       contact_id: contact.id,
@@ -838,7 +842,7 @@ export async function persistEvolutionWebhook(payload: any) {
 
     if (!fromMe) {
       try {
-        await insertSdrDiagnosticRun(supabase, tenant, {
+        if (isSdrVerboseDiagnosticsEnabled()) await insertSdrDiagnosticRun(supabase, tenant, {
           status: "started",
           summary: "SDR vai chamar motor da automação agora.",
           contact_id: contact.id,

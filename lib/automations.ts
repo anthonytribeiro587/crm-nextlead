@@ -50,21 +50,31 @@ export type SdrAnalysis = {
   };
 };
 
-export const defaultSdrAgentInstructions = `Você é um SDR humano da Next Lead, uma empresa que cria landing pages e soluções simples de captação de leads.
+export const defaultSdrAgentInstructions = `Você é um SDR humano da Next Lead, empresa que cria landing pages e soluções simples para captação de leads pelo WhatsApp.
 
-Regras de comportamento:
-- Nunca diga que é IA, robô, modelo ou automação.
-- Apresente-se como atendimento da Next Lead.
-- Seja curto, natural e comercial, como conversa de WhatsApp.
+Objetivo do agente:
+- Qualificar o lead comercialmente antes de entregar para a equipe.
+- Conduzir a conversa com perguntas simples, uma por vez.
+- Descobrir: tipo de negócio, se já tem site/landing page, se quer receber mais orçamentos pelo WhatsApp e urgência.
+
+Regras obrigatórias:
+- Nunca diga que é IA, robô, modelo, automação ou assistente virtual.
+- Apresente-se como atendimento da Next Lead somente quando fizer sentido.
+- Seja curto, natural e comercial, como conversa real de WhatsApp.
+- Sempre avance a qualificação. Não responda apenas “olá, tudo bem?” se ainda falta informação.
+- Faça no máximo uma pergunta por mensagem.
 - Não prometa preço fechado, prazo fechado, garantia de clientes ou resultado garantido.
 - Não invente informações que o lead não passou.
-- Faça uma pergunta por vez.
-- Seu objetivo é qualificar, não fechar a venda sozinho.
-- Descubra: tipo de negócio, se já tem site/landing page, se quer receber mais orçamentos pelo WhatsApp e urgência.
+- Se o lead pedir preço, diga que depende do nível de personalização e faça a próxima pergunta de qualificação.
 - Quando o lead demonstrar interesse real, diga que vai encaminhar para alguém da equipe orientar.
-- Se o lead pedir preço, diga que depende do nível de personalização e pergunte sobre o negócio antes de passar para avaliação.
 - Use português brasileiro.
-- Não use markdown pesado; no máximo quebras de linha curtas.`;
+- Não use markdown pesado; no máximo quebras de linha curtas.
+
+Roteiro recomendado:
+1. Se o lead só cumprimentou, pergunte qual é o tipo do negócio.
+2. Depois pergunte se ele já tem site, landing page ou usa só Instagram/WhatsApp.
+3. Depois pergunte se o objetivo é receber mais pedidos de orçamento pelo WhatsApp.
+4. Se houver interesse claro, classifique como quente e encaminhe para atendimento humano.`;
 
 export const defaultSdrAutomation: Automation = {
   id: "sdr-nextlead-default",
@@ -363,6 +373,98 @@ function isAutoSdrGloballyEnabled() {
   return String(process.env.NEXTLEAD_ENABLE_AUTO_SDR || "").toLowerCase() === "true";
 }
 
+function isSdrVerboseDiagnosticsEnabled() {
+  return String(process.env.NEXTLEAD_SDR_VERBOSE_LOGS || "").toLowerCase() === "true";
+}
+
+function isGreetingOnly(text: string) {
+  const normalized = compactText(text).toLowerCase().replace(/[!?.]/g, "");
+  return ["oi", "ola", "olá", "bom dia", "boa tarde", "boa noite", "e ai", "e aí", "tudo bem", "td bem"].includes(normalized) || normalized.length <= 4;
+}
+
+function forceOneQuestion(reply: string) {
+  const cleaned = String(reply || "").trim().replace(/\n{3,}/g, "\n\n");
+  const firstQuestion = cleaned.indexOf("?");
+  if (firstQuestion < 0) return cleaned;
+  return cleaned.slice(0, firstQuestion + 1).trim();
+}
+
+function buildSdrHardGuardrails() {
+  return `
+
+Regras finais que prevalecem sobre qualquer instrução anterior:
+- A resposta precisa estar relacionada à Next Lead, landing pages, captação de leads, WhatsApp ou qualificação comercial.
+- Se a última mensagem for apenas cumprimento, NÃO responda só cumprimento; pergunte o tipo de negócio.
+- Faça somente uma pergunta por mensagem.
+- Não diga que é IA.
+- Não invente preço, prazo ou garantia.`;
+}
+
+function refineSdrAnalysis(input: {
+  analysis: SdrAnalysis;
+  contact?: Contact;
+  messages: Message[];
+}) {
+  const analysis = { ...input.analysis, extracted: { ...(input.analysis.extracted || {}) } } as SdrAnalysis;
+  const first = compactText(input.contact?.name).split(" ")[0] || "tudo bem";
+  const inbound = input.messages.filter((message) => message.direction === "inbound");
+  const lastInbound = compactText(inbound.at(-1)?.body || "");
+  const businessType = analysis.extracted.businessType;
+  const hasWebsite = analysis.extracted.hasWebsite || "nao_informado";
+  const wantsWhatsAppLeads = analysis.extracted.wantsWhatsAppLeads || "nao_informado";
+
+  let nextQuestion = analysis.nextQuestion || "qual é o tipo do seu negócio?";
+  let suggestedReply = analysis.suggestedReply || "";
+
+  if (!businessType || isGreetingOnly(lastInbound)) {
+    nextQuestion = "qual é o tipo do seu negócio?";
+    suggestedReply = `Oi, ${first}! Aqui é da Next Lead. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
+    analysis.temperature = analysis.temperature === "quente" ? "morno" : analysis.temperature || "frio";
+    analysis.shouldHandoff = false;
+    analysis.handoffReason = "Ainda falta identificar o tipo de negócio do lead.";
+  } else if (hasWebsite === "nao_informado") {
+    nextQuestion = "hoje você já tem site ou landing page, ou usa mais Instagram/WhatsApp?";
+    suggestedReply = `Legal, ${first}. Hoje você já tem site ou landing page, ou usa mais Instagram/WhatsApp?`;
+    analysis.shouldHandoff = false;
+  } else if (wantsWhatsAppLeads === "nao_informado") {
+    nextQuestion = "seu objetivo é receber mais pedidos de orçamento direto no WhatsApp?";
+    suggestedReply = `Entendi. Seu objetivo é receber mais pedidos de orçamento direto no WhatsApp?`;
+    analysis.shouldHandoff = false;
+  } else if (analysis.shouldHandoff) {
+    suggestedReply = `Perfeito, ${first}. Pelo que você me falou, faz sentido a equipe da Next Lead avaliar o melhor caminho para captar mais contatos pelo WhatsApp. Vou encaminhar para alguém te orientar.`;
+  }
+
+  analysis.nextQuestion = nextQuestion;
+  analysis.suggestedReply = forceOneQuestion(suggestedReply);
+  return analysis;
+}
+
+async function hasRecentHumanTakeover(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  tenant: TenantContext,
+  contactId: string,
+) {
+  const minutes = Number(process.env.NEXTLEAD_HUMAN_TAKEOVER_MINUTES || 30);
+  if (!minutes || minutes < 1) return false;
+  const since = new Date(Date.now() - minutes * 60 * 1000).toISOString();
+  const result = await applyTenantFilter(
+    supabase
+      .from("messages")
+      .select("id,raw_payload,created_at")
+      .eq("contact_id", contactId)
+      .eq("direction", "outbound")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    tenant,
+  );
+  const rows = result.data || [];
+  return rows.some((message: any) => {
+    const source = String(message?.raw_payload?.source || message?.raw_payload?.nextlead_source || "").toLowerCase();
+    return source === "manual_crm" || source === "human";
+  });
+}
+
 function shouldSkipBecauseRecentRun(runs: any[], mode: AutomationMode) {
   if (mode !== "auto") return false;
   const cooldownMs = Number(process.env.NEXTLEAD_AUTO_SDR_COOLDOWN_SECONDS || 35) * 1000;
@@ -451,7 +553,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
 
   const contact = mapContactRow(contactResult.data);
 
-  if (input.source === "webhook") {
+  if (input.source === "webhook" && isSdrVerboseDiagnosticsEnabled()) {
     await insertAutomationRun(supabase, tenant, {
       automation_id: automation?.id || automationId,
       contact_id: contact.id,
@@ -480,6 +582,17 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
       input: { contactId: contact.id, mode, source: input.source || "manual" },
     });
     return { ok: true, skipped: true, mode, sent: false, reason: "Cooldown anti-duplicidade." };
+  }
+
+  if (input.source === "webhook" && automation?.conditions?.avoidHumanTakeover !== false && await hasRecentHumanTakeover(supabase, tenant, contact.id)) {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      contact_id: contact.id,
+      status: "skipped",
+      summary: "SDR pausado porque um atendente humano assumiu a conversa recentemente.",
+      input: { contactId: contact.id, mode, source: input.source || "manual" },
+    });
+    return { ok: true, skipped: true, mode, sent: false, reason: "Atendimento humano recente." };
   }
 
   const dealsResult = await applyTenantFilter(
@@ -533,10 +646,11 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
   );
   const messages = (messagesResult.data || []).map(mapMessageRow).reverse();
 
-  const agentInstructions = String(automation?.actions?.agentInstructions || process.env.NEXTLEAD_SDR_PROMPT || defaultSdrAgentInstructions).trim();
-  const analysis = process.env.GEMINI_API_KEY
+  const agentInstructions = `${String(automation?.actions?.agentInstructions || process.env.NEXTLEAD_SDR_PROMPT || defaultSdrAgentInstructions).trim()}${buildSdrHardGuardrails()}`;
+  const rawAnalysis = process.env.GEMINI_API_KEY
     ? await analyzeSdrWithGemini({ contact, deal, stage, pipeline, messages, agentInstructions })
     : analyzeSdrLocally({ contact, deal, stage, pipeline, messages });
+  const analysis = refineSdrAnalysis({ analysis: rawAnalysis, contact, messages });
 
   if (mode === "auto" && !isAutoSdrGloballyEnabled()) {
     await insertAutomationRun(supabase, tenant, {
@@ -589,7 +703,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
             status: "sent",
             provider: result.provider,
             provider_message_id: providerMessageId,
-            raw_payload: result.payload,
+            raw_payload: { ...(result.payload || {}), source: "auto_sdr" },
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
@@ -658,8 +772,10 @@ export function analyzeSdrLocally(input: {
   const first = compactText(contact?.name).split(" ")[0] || "tudo bem";
 
   const suggestedReply = shouldHandoff
-    ? `Perfeito, ${first}. Pelo que você me falou, faz sentido a Next Lead avaliar uma landing page/estrutura simples para transformar esse interesse em contatos pelo WhatsApp. Vou encaminhar para alguém da equipe te orientar com o melhor caminho.`
-    : `Oi, ${first}! Para eu te orientar melhor: ${missingQuestion.charAt(0).toUpperCase()}${missingQuestion.slice(1)}`;
+    ? `Perfeito, ${first}. Pelo que você me falou, faz sentido a equipe da Next Lead avaliar o melhor caminho para captar mais contatos pelo WhatsApp. Vou encaminhar para alguém te orientar.`
+    : !businessType || isGreetingOnly(lastInbound)
+      ? `Oi, ${first}! Aqui é da Next Lead. Pra eu te orientar melhor: qual é o tipo do seu negócio?`
+      : `Legal, ${first}. ${missingQuestion.charAt(0).toUpperCase()}${missingQuestion.slice(1)}`;
 
   const summaryParts = [
     `${contact?.name || "Lead"} está em ${pipeline?.name || "funil não definido"}${stage?.title ? ` / ${stage.title}` : ""}.`,
@@ -701,6 +817,12 @@ export async function analyzeSdrWithGemini(input: {
   const prompt = `${input.agentInstructions || defaultSdrAgentInstructions}
 
 Tarefa: analise o lead e retorne SOMENTE JSON válido com as chaves: summary, suggestedReply, nextQuestion, temperature, suggestedStageHint, shouldHandoff, handoffReason, extracted.
+
+Importante para suggestedReply:
+- Se a última mensagem for só cumprimento, responda com uma saudação curta e pergunte o tipo do negócio.
+- Não responda só “Olá, tudo bem?”. A resposta precisa avançar a qualificação.
+- Use no máximo uma pergunta.
+- Mantenha a resposta com 1 a 2 linhas de WhatsApp.
 
 Contexto:
 Contato: ${input.contact?.name || "Lead"} - ${input.contact?.company || input.contact?.source || "sem empresa"}
