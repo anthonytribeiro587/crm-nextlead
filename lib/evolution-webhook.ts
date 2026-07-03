@@ -773,13 +773,34 @@ export async function persistEvolutionWebhook(payload: any) {
 
     const contact = contactResult.data;
 
+    await insertSdrDiagnosticRun(supabase, tenant, {
+      status: "started",
+      summary: "SDR encontrou/criou contato; salvando mensagem e preparando automação.",
+      contact_id: contact.id,
+      input: { phone, contactId: contact.id, body: String(body || "").slice(0, 300), source: "webhook_contact_ok" },
+    });
+
+    let dealReady = false;
     if (!fromMe) {
-      await ensureDealForContact(
-        supabase,
-        contact.id,
-        `Atendimento WhatsApp - ${pushName || phone}`,
-        tenant,
-      );
+      try {
+        await ensureDealForContact(
+          supabase,
+          contact.id,
+          `Atendimento WhatsApp - ${pushName || phone}`,
+          tenant,
+        );
+        dealReady = true;
+      } catch (dealError) {
+        const dealMessage = dealError instanceof Error ? dealError.message : "erro ao preparar oportunidade";
+        errors.push(`deal:${phone}:${dealMessage}`);
+        await insertSdrDiagnosticRun(supabase, tenant, {
+          status: "error",
+          summary: "SDR não conseguiu preparar oportunidade, mas vai tentar responder mesmo assim.",
+          contact_id: contact.id,
+          input: { phone, contactId: contact.id, source: "webhook_deal_error" },
+          error: dealMessage,
+        });
+      }
     }
 
     const record = withTenant({
@@ -802,6 +823,13 @@ export async function persistEvolutionWebhook(payload: any) {
     );
     if (messageResult.error) {
       errors.push(`message:${phone}:${messageResult.error.message}`);
+      await insertSdrDiagnosticRun(supabase, tenant, {
+        status: "error",
+        summary: "SDR não conseguiu salvar mensagem recebida, mas vai tentar responder mesmo assim.",
+        contact_id: contact.id,
+        input: { phone, contactId: contact.id, body: String(body || "").slice(0, 300), source: "webhook_message_error" },
+        error: messageResult.error.message,
+      });
       // Não interromper o SDR: alguns eventos repetidos da Evolution podem bater em conflito
       // de provider_message_id, mas ainda assim queremos registrar/diagnosticar a automação.
     } else {
@@ -810,8 +838,14 @@ export async function persistEvolutionWebhook(payload: any) {
 
     if (!fromMe) {
       try {
+        await insertSdrDiagnosticRun(supabase, tenant, {
+          status: "started",
+          summary: "SDR vai chamar motor da automação agora.",
+          contact_id: contact.id,
+          input: { phone, contactId: contact.id, body: String(body || "").slice(0, 300), source: "webhook_before_run", dealReady, messageSaved: !messageResult.error },
+        });
         await ensureDefaultAutomations(supabase, tenant);
-        const debugStart = { phone, contactId: contact.id, tenantId: tenant.id, body: String(body || "").slice(0, 80), providerMessageId, messageSaved: !messageResult.error };
+        const debugStart = { phone, contactId: contact.id, tenantId: tenant.id, body: String(body || "").slice(0, 80), providerMessageId, dealReady, messageSaved: !messageResult.error };
         console.info("NextLead SDR webhook start", JSON.stringify(debugStart).slice(0, 1000));
         const automationResult = await runSdrAutomationForContact({ contactId: contact.id, tenant, source: "webhook" });
         automationResults.push({ phone, contactId: contact.id, ...automationResult });
