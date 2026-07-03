@@ -79,9 +79,9 @@ Regras obrigatórias:
 - Não use markdown pesado; no máximo quebras de linha curtas.
 
 Fluxo obrigatório do SDR:
-1. Primeira mensagem: não assuma que a pessoa sabe o que é landing page. Pergunte se ela já conhece a Next Lead ou se busca algum serviço específico. Explique em uma frase que a Next Lead cria páginas simples para apresentar negócios e levar clientes ao WhatsApp.
+1. Primeira mensagem: não assuma que a pessoa sabe o que é landing page. Explique em uma frase curta que a Next Lead cria páginas simples para negócios receberem contatos no WhatsApp e pergunte se a pessoa quer conhecer ou já busca algo específico.
 2. Se a pessoa já for cliente, pedir suporte, pedir ajuste, falar de protótipo em andamento ou não souber explicar, entregue para humano.
-3. Perguntar tipo de negócio somente quando o lead ainda não informou o negócio. Não avance sem entender minimamente o negócio.
+3. Se o lead disser “quero conhecer”, “não conheço” ou “me explica”, explique rapidamente quem é a Next Lead e pergunte o tipo de negócio. Não avance para presença atual sem entender minimamente o negócio.
 4. Perguntar presença atual: se já tem site/página ou se hoje usa Instagram/WhatsApp.
 5. Perguntar objetivo: se a pessoa quer receber mais pedidos de orçamento/clientes pelo WhatsApp.
 6. Perguntar momento: se quer ver uma sugestão/protótipo agora ou se está só pesquisando.
@@ -224,7 +224,7 @@ export async function getAutomationsData() {
       .from("automation_runs")
       .select("id,automation_id,contact_id,deal_id,status,summary,output,error,created_at")
       .order("created_at", { ascending: false })
-      .limit(30),
+      .limit(150),
     tenant,
   );
 
@@ -440,6 +440,27 @@ function isServiceInterestMessage(text: string) {
   ]);
 }
 
+function isExploreNextLeadMessage(text: string) {
+  const t = normalizeBasic(text);
+  return hasAny(t, [
+    "quero conhecer",
+    "quero saber",
+    "conhecer",
+    "nao conheco",
+    "não conheço",
+    "me explica",
+    "explica",
+    "o que voces fazem",
+    "o que vocês fazem",
+    "como funciona",
+    "tem interesse",
+    "quais servicos",
+    "quais serviços",
+    "servicos de voces",
+    "serviços de vocês",
+  ]);
+}
+
 function isGenericGreetingOrOpening(text: string) {
   const t = normalizeBasic(text);
   return isGreetingOnly(t) || hasAny(t, ["bom dia", "boa tarde", "boa noite", "tudo bem", "como vai"]);
@@ -447,10 +468,10 @@ function isGenericGreetingOrOpening(text: string) {
 
 function educationalReplyForPhase(phase: SdrPhase, first: string, state: Partial<SdrState>) {
   if (phase === "ask_business") {
-    return `Claro, ${first}. A Next Lead cria páginas simples para apresentar negócios e levar clientes direto para o WhatsApp. Você já conhece nossos serviços ou está buscando algo específico?`;
+    return `Claro, ${first}. A Next Lead cria páginas simples para apresentar seu serviço e levar pessoas interessadas ao WhatsApp. Qual é o tipo do seu negócio?`;
   }
   if (phase === "ask_presence") {
-    return `Claro. Landing page é uma página simples que apresenta seu serviço e leva o cliente direto para o WhatsApp. Hoje você já tem alguma página ou atende só por Instagram/WhatsApp?`;
+    return `Claro. É uma página simples com seu serviço, fotos/textos e botão para o WhatsApp. Hoje você já tem alguma página ou atende só por Instagram/WhatsApp?`;
   }
   if (phase === "ask_goal") {
     return `A ideia é facilitar para mais pessoas pedirem orçamento pelo seu WhatsApp, sem depender só de indicação ou post no Instagram. Esse é o objetivo para o seu negócio?`;
@@ -672,28 +693,28 @@ function computeSdrStateMachine(input: {
 
   const setAskBusiness = () => {
     state.phase = "ask_business";
-    nextQuestion = "você já conhece nossos serviços ou está buscando algo específico?";
-    suggestedReply = `Bom dia, ${first}! Aqui é da Next Lead. A gente cria páginas simples para apresentar negócios e levar clientes direto para o WhatsApp. Você já conhece nossos serviços ou está buscando algo específico?`;
+    nextQuestion = "você quer conhecer o serviço ou já busca algo específico?";
+    suggestedReply = `Bom dia, ${first}! Aqui é da Next Lead. A gente cria páginas simples para negócios receberem contatos no WhatsApp. Você quer conhecer o serviço ou já busca algo específico?`;
   };
 
   const setAskPresence = () => {
     state.phase = "ask_presence";
-    nextQuestion = "hoje você já tem uma página/site, ou atende mais pelo Instagram e WhatsApp?";
-    suggestedReply = `Legal, ${first}. Pra eu entender seu momento: hoje você já tem uma página/site, ou atende mais pelo Instagram e WhatsApp?`;
+    nextQuestion = "hoje você já tem uma página/site ou atende mais por Instagram/WhatsApp?";
+    suggestedReply = `Legal, ${first}. Hoje você já tem uma página/site ou atende mais por Instagram/WhatsApp?`;
   };
 
   const setAskGoal = () => {
     state.phase = "ask_goal";
-    nextQuestion = "você quer receber mais pedidos de orçamento/clientes pelo WhatsApp?";
+    nextQuestion = "você quer usar isso para receber mais clientes ou orçamentos pelo WhatsApp?";
     suggestedReply = state.hasWebsite === "sim"
-      ? `Entendi. A ideia seria melhorar essa presença para gerar mais pedidos de orçamento no WhatsApp. Esse é seu objetivo?`
-      : `Entendi. Uma página simples pode apresentar seu serviço e facilitar pedidos de orçamento pelo WhatsApp. Você quer usar isso para receber mais clientes/orçamentos?`;
+      ? `Entendi. A ideia seria melhorar sua presença e gerar mais pedidos no WhatsApp. Esse é seu objetivo?`
+      : `Entendi. A página serviria para apresentar seu serviço e facilitar pedidos no WhatsApp. Esse é seu objetivo?`;
   };
 
   const setAskUrgency = () => {
     state.phase = "ask_urgency";
-    nextQuestion = "você quer ver uma sugestão/protótipo agora ou está só pesquisando?";
-    suggestedReply = `Boa, ${first}. Quer que a gente prepare uma ideia/protótipo da página para você visualizar agora, ou está só pesquisando por enquanto?`;
+    nextQuestion = "você quer ver uma ideia/protótipo agora ou está só pesquisando?";
+    suggestedReply = `Boa, ${first}. Você quer ver uma ideia/protótipo da página agora ou está só pesquisando?`;
   };
 
   const setPaused = () => {
@@ -710,7 +731,7 @@ function computeSdrStateMachine(input: {
     shouldHandoff = true;
     handoffReason = "Lead informou negócio e interesse em captar contatos/orçamentos pelo WhatsApp.";
     nextQuestion = "vendedor deve enviar protótipo/sugestão";
-    suggestedReply = `Perfeito, ${first}. Pelo que você me falou, faz sentido a equipe da Next Lead preparar uma ideia/protótipo da página para o seu negócio. Vou encaminhar para alguém te orientar por aqui.`;
+    suggestedReply = `Perfeito, ${first}. Vou encaminhar para a equipe preparar uma ideia/protótipo para o seu negócio e te orientar por aqui.`;
   };
 
   const confused = isConfusionMessage(lastInbound);
@@ -727,16 +748,20 @@ function computeSdrStateMachine(input: {
       state.wantsWhatsAppLeads = state.wantsWhatsAppLeads === "sim" ? "sim" : "nao_informado";
       setHandoff();
       handoffReason = "Lead parece ser cliente existente, suporte ou pedido que precisa de atendimento humano.";
-      suggestedReply = `Certo, ${first}. Vou encaminhar seu atendimento para alguém da equipe da Next Lead te ajudar por aqui.`;
+      suggestedReply = `Certo, ${first}. Vou encaminhar para alguém da equipe te ajudar por aqui.`;
     } else {
       const business = inferBusinessFromAnswer(lastInbound, contact) || inferBusinessType(lastInbound, contact);
       if (business) {
         state.businessType = business;
         setAskPresence();
-      } else if (isServiceInterestMessage(lastInbound) && !isGenericGreetingOrOpening(lastInbound)) {
-        nextQuestion = "qual é o tipo do seu negócio?";
-        suggestedReply = `Legal, ${first}. A gente consegue te orientar melhor entendendo primeiro o tipo do negócio. Você trabalha com qual segmento?`;
+      } else if (isExploreNextLeadMessage(lastInbound)) {
         state.phase = "ask_business";
+        nextQuestion = "qual é o tipo do seu negócio?";
+        suggestedReply = `Claro. A Next Lead cria uma página simples para apresentar seu serviço e levar pessoas interessadas ao WhatsApp. Qual é o tipo do seu negócio?`;
+      } else if (isServiceInterestMessage(lastInbound) && !isGenericGreetingOrOpening(lastInbound)) {
+        state.phase = "ask_business";
+        nextQuestion = "qual é o tipo do seu negócio?";
+        suggestedReply = `Legal, ${first}. Pra eu te indicar o melhor caminho, qual é o tipo do seu negócio?`;
       } else {
         setAskBusiness();
       }
@@ -1572,7 +1597,7 @@ export function analyzeSdrLocally(input: {
   const suggestedReply = shouldHandoff
     ? `Perfeito, ${first}. Pelo que você me falou, faz sentido a equipe da Next Lead avaliar o melhor caminho para captar mais contatos pelo WhatsApp. Vou encaminhar para alguém te orientar.`
     : !businessType
-      ? `Bom dia, ${first}! Aqui é da Next Lead. A gente cria páginas simples para apresentar negócios e levar clientes direto para o WhatsApp. Você já conhece nossos serviços ou está buscando algo específico?`
+      ? `Bom dia, ${first}! Aqui é da Next Lead. A gente cria páginas simples para negócios receberem contatos no WhatsApp. Você quer conhecer o serviço ou já busca algo específico?`
       : `Legal, ${first}. ${missingQuestion.charAt(0).toUpperCase()}${missingQuestion.slice(1)}`;
 
   const summaryParts = [
@@ -1617,7 +1642,8 @@ export async function analyzeSdrWithGemini(input: {
 Tarefa: analise o lead e retorne SOMENTE JSON válido com as chaves: summary, suggestedReply, nextQuestion, temperature, suggestedStageHint, shouldHandoff, handoffReason, extracted.
 
 Importante para suggestedReply:
-- Se a última mensagem for só cumprimento, responda com uma saudação curta e pergunte o tipo do negócio.
+- Se a última mensagem for só cumprimento, explique a Next Lead em uma frase curta e pergunte se quer conhecer ou busca algo específico.
+- Se o lead responder “quero conhecer”, explique brevemente o serviço e pergunte o tipo do negócio.
 - Não responda só “Olá, tudo bem?”. A resposta precisa avançar a qualificação.
 - Use no máximo uma pergunta.
 - Use linguagem simples para leigos. Se citar landing page, explique como uma página simples que apresenta o serviço e leva para o WhatsApp.

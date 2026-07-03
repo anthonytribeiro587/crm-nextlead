@@ -172,9 +172,10 @@ export default async function AutomacoesPage() {
               <small>{automaticReady ? "Agora teste enviando mensagem de outro número." : "Abra o diagnóstico para ver exatamente o que falta."}</small>
             </div>
             <div className="gemini-env-v15 token-usage-v157">
-              <span>Consumo Gemini registrado</span>
+              <span>Consumo Gemini registrado no CRM</span>
               <strong>{tokenStats.total ? `${tokenStats.total.toLocaleString("pt-BR")} tokens` : "Sem uso registrado"}</strong>
-              <small>{tokenStats.runs ? `${tokenStats.runs} execução(ões) recentes · entrada ${tokenStats.prompt.toLocaleString("pt-BR")} · saída ${tokenStats.response.toLocaleString("pt-BR")}` : "A partir das próximas respostas do SDR, o CRM registra tokens retornados pelo Gemini."}</small>
+              <small>{tokenStats.runs ? `${tokenStats.runs} execução(ões) recentes · entrada ${tokenStats.prompt.toLocaleString("pt-BR")} · saída ${tokenStats.response.toLocaleString("pt-BR")}` : "O SDR automático usa fluxo fixo por padrão. Só gasta Gemini quando você testa a conexão ou ativa lapidação com NEXTLEAD_SDR_USE_GEMINI_POLISH=true."}</small>
+              <small>Para ver o limite real da sua chave, abra Google AI Studio/Cloud Console. Este card mostra apenas o consumo registrado pelo CRM.</small>
             </div>
             <div className="diagnostic-actions-v147">
               <a className="btn secondary" href="/api/ai/gemini-test" target="_blank">Testar Gemini isolado</a>
