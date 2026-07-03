@@ -8,6 +8,58 @@ function onlyDigits(value: unknown) {
   return String(value || "").replace(/\D/g, "");
 }
 
+
+function rawJidFromItem(key: any, item: any) {
+  const source = item?.data || item || {};
+  const nestedKey =
+    source?.key ||
+    source?.message?.key ||
+    source?.update?.key ||
+    source?.message?.message?.key ||
+    {};
+  return String(
+    key?.remoteJid ||
+      nestedKey?.remoteJid ||
+      source?.remoteJid ||
+      source?.jid ||
+      source?.chatId ||
+      source?.to ||
+      source?.from ||
+      source?.sender ||
+      source?.recipient ||
+      "",
+  );
+}
+
+function leftOfJid(jid: unknown) {
+  return String(jid || "").split("@")[0];
+}
+
+function isBroadcastJid(jid: unknown) {
+  const raw = String(jid || "").toLowerCase();
+  return raw.includes("@broadcast") || raw === "status@broadcast" || raw.includes("status@broadcast");
+}
+
+function isNewsletterJid(jid: unknown) {
+  return String(jid || "").toLowerCase().includes("@newsletter");
+}
+
+function isLikelyWhatsappGroupId(jid: unknown) {
+  const left = leftOfJid(jid).replace(/\D/g, "");
+  // Grupos/comunidades do WhatsApp frequentemente aparecem como IDs longos começando por 120...
+  // Quando a Evolution não mantém @g.us no payload, isso evita tratar promoção de grupo como lead.
+  return /^120\d{8,}$/.test(left);
+}
+
+function shouldIgnoreChat(key: any, item: any) {
+  const remoteJid = rawJidFromItem(key, item);
+  if (isGroupJid(remoteJid)) return { ignore: true, reason: "group_jid", remoteJid };
+  if (isBroadcastJid(remoteJid)) return { ignore: true, reason: "broadcast_jid", remoteJid };
+  if (isNewsletterJid(remoteJid)) return { ignore: true, reason: "newsletter_jid", remoteJid };
+  if (isLikelyWhatsappGroupId(remoteJid)) return { ignore: true, reason: "likely_group_id_120", remoteJid };
+  return { ignore: false, reason: null as string | null, remoteJid };
+}
+
 function normalizePhone(value: unknown) {
   let digits = onlyDigits(value);
   if (!digits) return "";
@@ -52,6 +104,10 @@ function phoneFromKey(key: any, item: any) {
     String(
       process.env.NEXTLEAD_SAVE_GROUP_MESSAGES || "false",
     ).toLowerCase() === "true";
+
+  if (!allowGroups && (isBroadcastJid(remoteJid) || isNewsletterJid(remoteJid) || isLikelyWhatsappGroupId(remoteJid))) {
+    return "";
+  }
 
   if (isGroupJid(remoteJid)) {
     if (!allowGroups) return "";
@@ -578,10 +634,18 @@ export async function persistEvolutionWebhook(payload: any) {
 
   for (const item of messages) {
     const key = item?.key || item?.data?.key || {};
+    const chatCheck = shouldIgnoreChat(key, item);
+    if (chatCheck.ignore) {
+      skipped += 1;
+      errors.push(`ignored:${chatCheck.reason}:${chatCheck.remoteJid || "sem_jid"}`);
+      continue;
+    }
+
     const phone = phoneFromKey(key, item);
 
     if (!phone) {
       skipped += 1;
+      errors.push("ignored:no_phone_or_group");
       continue;
     }
 

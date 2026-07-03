@@ -37,18 +37,44 @@ export async function GET() {
       return false;
     };
     const normalizeJid = (value: unknown) => String(value || "").replace(/@.+$/, "").replace(/\D/g, "");
+    const maskJid = (value: unknown) => {
+      const raw = String(value || "");
+      if (!raw) return null;
+      const [left, domain] = raw.split("@");
+      const visible = left.length > 8 ? `${left.slice(0, 4)}...${left.slice(-4)}` : left;
+      return domain ? `${visible}@${domain}` : visible;
+    };
+    const classifyJid = (value: unknown) => {
+      const raw = String(value || "").toLowerCase();
+      const left = raw.split("@")[0].replace(/\D/g, "");
+      if (raw.includes("@g.us")) return "grupo";
+      if (raw.includes("@broadcast") || raw.includes("status@broadcast")) return "broadcast/status";
+      if (raw.includes("@newsletter")) return "newsletter";
+      if (/^120\d{8,}$/.test(left)) return "provavel_grupo_120";
+      return "contato";
+    };
     const previewPayload = (payload: any) => {
       const data = Array.isArray(payload?.data) ? payload.data[0] : payload?.data || payload;
       const key = data?.key || data?.data?.key || {};
       const msg = data?.message || data?.data?.message || {};
       const body = msg?.conversation || msg?.extendedTextMessage?.text || msg?.imageMessage?.caption || msg?.videoMessage?.caption || (msg?.audioMessage ? "[áudio]" : "");
-      const phone = normalizeJid(key?.remoteJid || data?.remoteJid || data?.sender || data?.from || data?.number);
+      const remoteJid = key?.remoteJid || data?.remoteJid || data?.sender || data?.from || data?.number;
+      const phone = normalizeJid(remoteJid);
+      const chatKind = classifyJid(remoteJid);
+      const fromMe = parseFromMe(key?.fromMe) || parseFromMe(data?.fromMe);
+      const hasText = Boolean(body);
+      const messageType = data?.messageType || data?.type || Object.keys(msg || {})[0] || null;
+      const sdrEligible = chatKind === "contato" && !fromMe && hasText && !String(messageType || "").toLowerCase().includes("sticker");
       return {
         phone: phone ? `${phone.slice(0, 4)}...${phone.slice(-4)}` : null,
-        fromMe: parseFromMe(key?.fromMe) || parseFromMe(data?.fromMe),
-        hasText: Boolean(body),
+        remoteJid: maskJid(remoteJid),
+        chatKind,
+        sdrEligible,
+        skipReason: sdrEligible ? null : fromMe ? "from_me" : !hasText ? "sem_texto" : chatKind !== "contato" ? chatKind : "tipo_nao_suportado",
+        fromMe,
+        hasText,
         textPreview: body ? String(body).slice(0, 80) : null,
-        messageType: data?.messageType || data?.type || Object.keys(msg || {})[0] || null,
+        messageType,
       };
     };
     recentWebhooks = (result.data || []).map((event: any) => ({
