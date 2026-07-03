@@ -70,6 +70,7 @@ Regras obrigatórias:
 - Sempre avance a qualificação. Não responda apenas “olá, tudo bem?” se ainda falta informação.
 - Se o lead disser “não entendi”, “começar o quê?” ou “como assim?”, explique o passo em palavras simples e refaça a pergunta certa.
 - Faça no máximo uma pergunta por mensagem.
+- Se a pessoa mandar apenas “oi”, “bom dia”, “ok” ou algo sem informação depois que você já perguntou algo, não reinicie o fluxo.
 - Não prometa preço fechado, prazo fechado, garantia de clientes ou resultado garantido.
 - Não invente informações que o lead não passou.
 - Se o lead pedir preço, diga que depende do nível de personalização e faça a próxima pergunta de qualificação.
@@ -683,19 +684,22 @@ function computeSdrStateMachine(input: {
 }
 
 async function polishSdrReplyWithGemini(input: { analysis: SdrAnalysis; state: SdrState; contact?: Contact }) {
+  // Por estabilidade comercial, o automático usa as mensagens determinísticas do fluxo.
+  // O Gemini pode ser ligado para lapidar texto, mas só é aceito se passar nas travas abaixo.
+  const allowPolish = String(process.env.NEXTLEAD_SDR_USE_GEMINI_POLISH || "").toLowerCase() === "true";
   const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) return input.analysis;
+  if (!apiKey || !allowPolish) return input.analysis;
+
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const prompt = `Reescreva a mensagem abaixo como WhatsApp comercial da Next Lead, sem mudar o objetivo nem a pergunta.
 
-Regras:
+Regras obrigatórias:
 - Nunca diga que é IA.
 - Não invente preço, prazo ou garantia.
-- Mantenha uma pergunta só.
+- Mantenha exatamente uma pergunta, se a mensagem base tiver pergunta.
 - Máximo 3 linhas.
+- Não corte a frase. A resposta deve terminar com ponto, interrogação ou exclamação.
 - Use linguagem simples para leigos.
-- Se falar em landing page, explique como página simples para apresentar o serviço e levar ao WhatsApp.
-- Se a fase for handoff, deixe claro que alguém da equipe vai orientar e preparar uma sugestão/protótipo.
 
 Fase: ${input.state.phase}
 Mensagem base: ${input.analysis.suggestedReply}
@@ -708,15 +712,16 @@ Responda somente a mensagem final.`;
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.25, maxOutputTokens: 180 },
+        generationConfig: { temperature: 0.15, maxOutputTokens: 160 },
       }),
     });
     const payload = await response.json().catch(() => ({}));
     const text = payload?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join(" ").trim();
-    if (!response.ok || !text) return input.analysis;
+    const polished = forceOneQuestion(text || "");
+    if (!response.ok || !polished || isIncompleteSdrReply(polished)) return input.analysis;
     return {
       ...input.analysis,
-      suggestedReply: forceOneQuestion(text),
+      suggestedReply: polished,
       geminiUsage: {
         promptTokenCount: payload?.usageMetadata?.promptTokenCount,
         candidatesTokenCount: payload?.usageMetadata?.candidatesTokenCount,
@@ -836,6 +841,29 @@ function forceOneQuestion(reply: string) {
   const firstQuestion = cleaned.indexOf("?");
   if (firstQuestion < 0) return cleaned;
   return cleaned.slice(0, firstQuestion + 1).trim();
+}
+
+function isIncompleteSdrReply(reply: string) {
+  const text = compactText(reply);
+  const normalized = normalizeBasic(text);
+  if (text.length < 18) return true;
+  if (/[,:;]$/.test(text)) return true;
+  if (hasAny(normalized, [
+    "para eu",
+    "pra eu",
+    "aqui e da next",
+    "somos da next",
+    "otimo anthony para eu",
+  ]) && !text.includes("?")) return true;
+  if (normalized === "ola" || normalized === "oi" || normalized === "tudo bem") return true;
+  return false;
+}
+
+function isLowInfoNonAnswer(text: string) {
+  const t = normalizeBasic(text);
+  if (!t) return true;
+  if (["oi", "ola", "olá", "bom dia", "boa tarde", "boa noite", "eai", "e ai", "next", "next?", "da", "ok", "blz", "beleza"].includes(t)) return true;
+  return t.length <= 3 && !isShortYes(t) && !isShortNo(t);
 }
 
 function buildSdrHardGuardrails() {
@@ -1114,6 +1142,25 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
 
   const stateLoad = await loadSdrState(supabase, tenant, contact.id);
 
+  const outboundMessages = messages.filter((message) => message.direction === "outbound");
+  const lastOutbound = outboundMessages.at(-1);
+  const lastOutboundAt = lastOutbound?.createdAt ? new Date(lastOutbound.createdAt).getTime() : 0;
+  const lastOutboundWasRecent = Boolean(lastOutboundAt && Date.now() - lastOutboundAt < 10 * 60 * 1000);
+  const hasSdrContext = Boolean(stateLoad.state?.businessType || stateLoad.state?.phase !== "ask_business" || outboundMessages.length > 0);
+
+  if (input.source === "webhook" && hasSdrContext && lastOutboundWasRecent && isLowInfoNonAnswer(latestInboundText)) {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      contact_id: contact.id,
+      deal_id: deal?.id || null,
+      status: "skipped",
+      summary: "SDR ignorou mensagem curta/sem informação após já ter feito uma pergunta.",
+      input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText, inboundMessageId: input.inboundMessageId },
+      output: { phase: stateLoad.state?.phase, lastOutbound: lastOutbound?.body },
+    });
+    return { ok: true, skipped: true, mode, sent: false, reason: "Mensagem curta/sem informação após pergunta do SDR." };
+  }
+
   if (input.source === "webhook" && stateLoad.state?.lastInboundText && compactText(stateLoad.state.lastInboundText).toLowerCase() === latestInboundText.toLowerCase()) {
     await insertAutomationRun(supabase, tenant, {
       automation_id: automation?.id || automationId,
@@ -1129,6 +1176,9 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
 
   const stateMachine = computeSdrStateMachine({ contact, deal, stage, pipeline, messages, previousState: stateLoad.state });
   let analysis = await polishSdrReplyWithGemini({ analysis: stateMachine.analysis, state: stateMachine.state, contact });
+  if (isIncompleteSdrReply(analysis.suggestedReply)) {
+    analysis = stateMachine.analysis;
+  }
 
   if (input.source === "webhook" && stateLoad.state?.phase === "handoff") {
     await insertAutomationRun(supabase, tenant, {
