@@ -122,3 +122,14 @@ Depois faça redeploy.
 - Desligado: não analisa nem sugere.
 - Sugerir resposta: recomendado para testes. A IA gera a sugestão e o atendente envia manualmente.
 - Responder automático: exige `NEXTLEAD_ENABLE_AUTO_SDR=true` e deve ser usado só depois de validar a qualidade das respostas.
+
+
+### v15.8 SDR State Machine
+
+Depois da v15.8, rode no Supabase:
+
+```sql
+scripts/migration-v8-sdr-state-machine.sql
+```
+
+Essa migration cria `sdr_states`, que guarda o estado do agente SDR por contato e evita perguntas repetidas.

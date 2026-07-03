@@ -98,6 +98,43 @@ export async function GET() {
     recentRunsFallback = fallbackRuns.error ? [{ error: fallbackRuns.error.message }] : (fallbackRuns.data || []);
   }
 
+  let geminiTokenUsage = {
+    last24h: { runs: 0, promptTokens: 0, responseTokens: 0, totalTokens: 0 },
+    last7d: { runs: 0, promptTokens: 0, responseTokens: 0, totalTokens: 0 },
+  };
+
+  if (supabase) {
+    const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const usageResult = await applyTenantFilter(
+      supabase
+        .from("automation_runs")
+        .select("id,output,created_at")
+        .gte("created_at", since7d)
+        .order("created_at", { ascending: false })
+        .limit(500),
+      tenant,
+    );
+    const now = Date.now();
+    for (const run of usageResult.data || []) {
+      const usage = (run as any)?.output?.geminiUsage || {};
+      const total = Number(usage.totalTokenCount || 0);
+      if (!total) continue;
+      const prompt = Number(usage.promptTokenCount || 0);
+      const responseTokens = Number(usage.candidatesTokenCount || 0);
+      const created = new Date((run as any).created_at || 0).getTime();
+      geminiTokenUsage.last7d.runs += 1;
+      geminiTokenUsage.last7d.promptTokens += prompt;
+      geminiTokenUsage.last7d.responseTokens += responseTokens;
+      geminiTokenUsage.last7d.totalTokens += total;
+      if (created && now - created <= 24 * 60 * 60 * 1000) {
+        geminiTokenUsage.last24h.runs += 1;
+        geminiTokenUsage.last24h.promptTokens += prompt;
+        geminiTokenUsage.last24h.responseTokens += responseTokens;
+        geminiTokenUsage.last24h.totalTokens += total;
+      }
+    }
+  }
+
   const gemini = await testGeminiConnection("Responda apenas: OK Gemini NextLead.");
 
   return NextResponse.json({
@@ -116,6 +153,7 @@ export async function GET() {
     recentRuns,
     recentRunsFallback,
     recentWebhooks,
+    geminiTokenUsage,
     gemini,
   }, { headers: { "Cache-Control": "no-store" } });
 }

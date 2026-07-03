@@ -32,6 +32,19 @@ export default async function AutomacoesPage() {
   const sdrInstructions = String((sdr?.actions as any)?.agentInstructions || defaultSdrAgentInstructions);
   const lastRun = runs[0];
   const automaticReady = Boolean(geminiConfigured && autoSendEnabled && sdrMode === "auto" && sdr?.enabled !== false && tableReady);
+  const tokenStats = runs.reduce(
+    (acc, run: any) => {
+      const usage = run?.output?.geminiUsage || {};
+      const total = Number(usage.totalTokenCount || 0);
+      if (!total) return acc;
+      acc.runs += 1;
+      acc.prompt += Number(usage.promptTokenCount || 0);
+      acc.response += Number(usage.candidatesTokenCount || 0);
+      acc.total += total;
+      return acc;
+    },
+    { runs: 0, prompt: 0, response: 0, total: 0 },
+  );
 
   return (
     <>
@@ -157,6 +170,11 @@ export default async function AutomacoesPage() {
               <span>Status do automático</span>
               <strong>{automaticReady ? "Pronto" : "Não pronto"}</strong>
               <small>{automaticReady ? "Agora teste enviando mensagem de outro número." : "Abra o diagnóstico para ver exatamente o que falta."}</small>
+            </div>
+            <div className="gemini-env-v15 token-usage-v157">
+              <span>Consumo Gemini registrado</span>
+              <strong>{tokenStats.total ? `${tokenStats.total.toLocaleString("pt-BR")} tokens` : "Sem uso registrado"}</strong>
+              <small>{tokenStats.runs ? `${tokenStats.runs} execução(ões) recentes · entrada ${tokenStats.prompt.toLocaleString("pt-BR")} · saída ${tokenStats.response.toLocaleString("pt-BR")}` : "A partir das próximas respostas do SDR, o CRM registra tokens retornados pelo Gemini."}</small>
             </div>
             <div className="diagnostic-actions-v147">
               <a className="btn secondary" href="/api/ai/gemini-test" target="_blank">Testar Gemini isolado</a>

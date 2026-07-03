@@ -48,6 +48,11 @@ export type SdrAnalysis = {
     wantsWhatsAppLeads?: "sim" | "nao" | "nao_informado";
     urgency?: "baixa" | "media" | "alta";
   };
+  geminiUsage?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
 };
 
 export const defaultSdrAgentInstructions = `Você é um SDR humano da Next Lead, empresa que cria landing pages e soluções simples para captação de leads pelo WhatsApp.
@@ -85,16 +90,19 @@ export const defaultSdrAutomation: Automation = {
   mode: "suggest",
   triggerType: "message_received",
   conditions: {
-    onlyOpenDeals: true,
+    onlyOpenDeals: false,
     avoidHumanTakeover: true,
     businessHoursOnly: false,
-    cooldownMinutes: 5,
+    cooldownMinutes: 0,
   },
   actions: {
     generateReply: true,
     classifyTemperature: true,
     suggestStage: true,
     logHistory: true,
+    stateMachine: true,
+    handoffToSeller: true,
+    prototypeHandoff: true,
     autoSendRequiresEnv: true,
     agentInstructions: defaultSdrAgentInstructions,
   },
@@ -256,11 +264,12 @@ function hasAny(text: string, words: string[]) {
 function inferBusinessType(text: string, contact?: Contact) {
   const source = `${contact?.company || ""} ${text}`.toLowerCase();
   const options: Array<[string, string[]]> = [
-    ["assistência técnica", ["assistência", "celular", "telefone", "conserto", "manutenção"]],
+    ["assistência técnica", ["assistência", "assistencia", "celular", "telefone", "conserto", "manutenção", "manutencao"]],
+    ["lavagem / estética automotiva", ["lavagem", "lavage", "lavação", "lavacao", "lava rápido", "lava rapido", "estética automotiva", "estetica automotiva", "carro", "carros", "automotivo"]],
     ["academia / studio", ["academia", "cross", "gym", "personal", "aluno", "treino"]],
-    ["serviços locais", ["eletric", "instala", "pintura", "reforma", "obra", "manutenção"]],
-    ["loja / comércio", ["loja", "venda", "produto", "revenda", "cliente na loja"]],
-    ["clínica / atendimento", ["clínica", "consulta", "dent", "estética", "saúde"]],
+    ["serviços locais", ["eletric", "instala", "pintura", "reforma", "obra", "manutenção", "manutencao"]],
+    ["loja / comércio", ["loja", "venda", "produto", "revenda", "cliente na loja", "shopee", "tenis", "tênis", "ecommerce", "e-commerce"]],
+    ["clínica / atendimento", ["clínica", "clinica", "consulta", "dent", "estética", "estetica", "saúde", "saude"]],
   ];
   return options.find(([, words]) => hasAny(source, words))?.[0];
 }
@@ -277,6 +286,352 @@ function inferWantsWhatsappLeads(text: string): SdrAnalysis["extracted"]["wantsW
   if (hasAny(lower, ["whatsapp", "zap", "orçamento", "orcamento", "mais clientes", "leads", "chamar", "mensagem"])) return "sim";
   if (hasAny(lower, ["não quero whatsapp", "nao quero whatsapp", "só catálogo", "so catalogo"])) return "nao";
   return "nao_informado";
+}
+
+
+type SdrPhase = "ask_business" | "ask_presence" | "ask_goal" | "ask_urgency" | "handoff" | "paused";
+
+type SdrState = {
+  id?: string;
+  tenantId?: string;
+  contactId: string;
+  dealId?: string;
+  phase: SdrPhase;
+  businessType?: string;
+  hasWebsite?: "sim" | "nao" | "nao_informado";
+  currentChannels?: string[];
+  wantsWhatsAppLeads?: "sim" | "nao" | "nao_informado";
+  urgency?: "baixa" | "media" | "alta" | "nao_informado";
+  handoffReady?: boolean;
+  handoffAt?: string;
+  lastInboundText?: string;
+  updatedAt?: string;
+};
+
+function normalizeBasic(text: string) {
+  return compactText(text)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isAffirmative(text: string) {
+  const t = normalizeBasic(text);
+  return ["sim", "s", "isso", "tenho", "tenho sim", "quero", "exato", "exatamente", "pode", "claro", "com certeza", "tenho isso"].some((item) => t === item || t.includes(item));
+}
+
+function isNegative(text: string) {
+  const t = normalizeBasic(text);
+  return ["nao", "nao tenho", "sem", "ainda nao", "so instagram", "so whatsapp", "somente instagram", "somente whatsapp"].some((item) => t === item || t.includes(item));
+}
+
+function inferChannels(text: string) {
+  const t = normalizeBasic(text);
+  const channels = new Set<string>();
+  if (hasAny(t, ["instagram", "insta"])) channels.add("Instagram");
+  if (hasAny(t, ["whatsapp", "whats", "zap"])) channels.add("WhatsApp");
+  if (hasAny(t, ["google", "pesquisa"])) channels.add("Google");
+  if (hasAny(t, ["indicacao", "indicação"])) channels.add("Indicação");
+  if (hasAny(t, ["facebook", "face"])) channels.add("Facebook");
+  return Array.from(channels);
+}
+
+function inferUrgency(text: string): "baixa" | "media" | "alta" | "nao_informado" {
+  const t = normalizeBasic(text);
+  if (hasAny(t, ["urgente", "agora", "hoje", "essa semana", "quanto antes", "logo", "rapido", "rápido", "pra ontem"])) return "alta";
+  if (hasAny(t, ["sem pressa", "futuramente", "mais pra frente", "so pesquisando", "só pesquisando", "nao tenho pressa"])) return "baixa";
+  if (hasAny(t, ["mes", "mês", "semana que vem", "proximo", "próximo"])) return "media";
+  return "nao_informado";
+}
+
+function isLikelyBusinessAnswer(text: string) {
+  const t = normalizeBasic(text);
+  if (!t || isGreetingOnly(t)) return false;
+  if (["sim", "nao", "isso", "tenho isso", "whatsapp", "zap", "instagram", "insta", "google", "site", "landing"].includes(t)) return false;
+  return t.length >= 4 && /[a-z]/.test(t);
+}
+
+function inferBusinessFromAnswer(text: string, contact?: Contact) {
+  const inferred = inferBusinessType(text, contact);
+  if (inferred) return inferred;
+  const cleaned = compactText(text);
+  if (isLikelyBusinessAnswer(cleaned)) return cleaned.slice(0, 80);
+  return undefined;
+}
+
+function lastOutboundQuestion(messages: Message[]) {
+  return normalizeBasic(messages.filter((message) => message.direction === "outbound").at(-1)?.body || "");
+}
+
+function mapSdrStateRow(row: any): SdrState {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id || undefined,
+    contactId: row.contact_id,
+    dealId: row.deal_id || undefined,
+    phase: row.phase || "ask_business",
+    businessType: row.business_type || undefined,
+    hasWebsite: row.has_website || "nao_informado",
+    currentChannels: Array.isArray(row.current_channels) ? row.current_channels : [],
+    wantsWhatsAppLeads: row.wants_whatsapp_leads || "nao_informado",
+    urgency: row.urgency || "nao_informado",
+    handoffReady: Boolean(row.handoff_ready),
+    handoffAt: row.handoff_at || undefined,
+    lastInboundText: row.last_inbound_text || undefined,
+    updatedAt: row.updated_at || undefined,
+  };
+}
+
+async function loadSdrState(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  tenant: TenantContext,
+  contactId: string,
+): Promise<{ state?: SdrState; tableReady: boolean; error?: string }> {
+  const result = await applyTenantFilter(
+    supabase
+      .from("sdr_states")
+      .select("id,tenant_id,contact_id,deal_id,phase,business_type,has_website,current_channels,wants_whatsapp_leads,urgency,handoff_ready,handoff_at,last_inbound_text,updated_at")
+      .eq("contact_id", contactId)
+      .limit(1),
+    tenant,
+  ).maybeSingle();
+
+  if (result.error) {
+    const message = result.error.message || "";
+    if (message.includes("sdr_states") || message.includes("schema cache") || message.includes("does not exist")) {
+      return { tableReady: false, error: message };
+    }
+    return { tableReady: true, error: message };
+  }
+
+  return { tableReady: true, state: result.data ? mapSdrStateRow(result.data) : undefined };
+}
+
+async function saveSdrState(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  tenant: TenantContext,
+  state: SdrState,
+) {
+  const payload = withTenant({
+    contact_id: state.contactId,
+    deal_id: state.dealId || null,
+    phase: state.phase,
+    business_type: state.businessType || null,
+    has_website: state.hasWebsite || "nao_informado",
+    current_channels: state.currentChannels || [],
+    wants_whatsapp_leads: state.wantsWhatsAppLeads || "nao_informado",
+    urgency: state.urgency || "nao_informado",
+    handoff_ready: Boolean(state.handoffReady),
+    handoff_at: state.handoffAt || null,
+    last_inbound_text: state.lastInboundText || null,
+    updated_at: new Date().toISOString(),
+  }, tenant);
+
+  if (state.id) {
+    const updated = await supabase.from("sdr_states").update(payload).eq("id", state.id).select("id").single();
+    if (!updated.error) return { ok: true, id: updated.data?.id };
+  }
+
+  // Evita depender de constraint: busca por contato e atualiza, senão insere.
+  const existing = await applyTenantFilter(
+    supabase.from("sdr_states").select("id").eq("contact_id", state.contactId).limit(1),
+    tenant,
+  ).maybeSingle();
+  if (existing.data?.id) {
+    const updated = await supabase.from("sdr_states").update(payload).eq("id", existing.data.id).select("id").single();
+    return { ok: !updated.error, id: updated.data?.id, error: updated.error?.message };
+  }
+
+  const inserted = await supabase.from("sdr_states").insert({ ...payload, created_at: new Date().toISOString() }).select("id").single();
+  return { ok: !inserted.error, id: inserted.data?.id, error: inserted.error?.message };
+}
+
+function computeSdrStateMachine(input: {
+  contact?: Contact;
+  deal?: Deal;
+  stage?: Stage;
+  pipeline?: Pipeline;
+  messages: Message[];
+  previousState?: SdrState;
+}): { state: SdrState; analysis: SdrAnalysis; shouldPauseAfterHandoff: boolean } {
+  const { contact, deal, stage, pipeline, messages, previousState } = input;
+  const inbound = messages.filter((message) => message.direction === "inbound");
+  const lastInbound = compactText(inbound.at(-1)?.body || "");
+  const allInboundText = compactText(inbound.map((message) => message.body).join("\n"));
+  const allText = compactText(messages.map((message) => `${message.direction}: ${message.body}`).join("\n"));
+  const lastQuestion = lastOutboundQuestion(messages);
+  const first = compactText(contact?.name).split(" ")[0] || "tudo bem";
+
+  const state: SdrState = {
+    contactId: contact?.id || previousState?.contactId || "",
+    dealId: deal?.id || previousState?.dealId,
+    phase: previousState?.phase || "ask_business",
+    businessType: previousState?.businessType,
+    hasWebsite: previousState?.hasWebsite || "nao_informado",
+    currentChannels: previousState?.currentChannels || [],
+    wantsWhatsAppLeads: previousState?.wantsWhatsAppLeads || "nao_informado",
+    urgency: previousState?.urgency || "nao_informado",
+    handoffReady: previousState?.handoffReady || false,
+    handoffAt: previousState?.handoffAt,
+    lastInboundText: lastInbound,
+    id: previousState?.id,
+  };
+
+  const inferredBusiness = inferBusinessType(allInboundText, contact) || inferBusinessFromAnswer(lastInbound, contact);
+  if (!state.businessType && inferredBusiness) state.businessType = inferredBusiness;
+
+  const channels = new Set([...(state.currentChannels || []), ...inferChannels(allInboundText)]);
+  state.currentChannels = Array.from(channels);
+
+  const websiteFromAll = inferHasWebsite(allInboundText);
+  const websiteQuestionWasAsked = hasAny(lastQuestion, ["site", "landing", "pagina", "página", "instagram/whatsapp"]);
+  const normalizedLast = normalizeBasic(lastInbound);
+  if (state.hasWebsite === "nao_informado" && websiteFromAll !== "nao_informado") state.hasWebsite = websiteFromAll;
+  if (state.hasWebsite === "nao_informado" && websiteQuestionWasAsked) {
+    if (isAffirmative(lastInbound) && hasAny(normalizedLast, ["tenho", "isso", "site", "landing"])) state.hasWebsite = "sim";
+    if (isNegative(lastInbound) || hasAny(normalizedLast, ["instagram", "insta", "whatsapp", "zap"])) state.hasWebsite = "nao";
+  }
+
+  const wantsFromAll = inferWantsWhatsappLeads(allInboundText);
+  const goalQuestionWasAsked = hasAny(lastQuestion, ["orcamento direto no whatsapp", "orçamento direto no whatsapp", "pedidos de orçamento", "captar", "mais contatos", "mais clientes"]);
+  if (state.wantsWhatsAppLeads === "nao_informado" && wantsFromAll !== "nao_informado") state.wantsWhatsAppLeads = wantsFromAll;
+  if (state.wantsWhatsAppLeads === "nao_informado" && goalQuestionWasAsked) {
+    if (isAffirmative(lastInbound) || hasAny(normalizedLast, ["whatsapp", "zap", "orcamento", "orçamento", "cliente", "lead"])) state.wantsWhatsAppLeads = "sim";
+    if (isNegative(lastInbound)) state.wantsWhatsAppLeads = "nao";
+  }
+
+  const urgencyFromAll = inferUrgency(allInboundText);
+  const urgencyQuestionWasAsked = hasAny(lastQuestion, ["urgencia", "urgência", "pesquisando", "quando", "comecar", "começar"]);
+  if (state.urgency === "nao_informado" && urgencyFromAll !== "nao_informado") state.urgency = urgencyFromAll;
+  if (state.urgency === "nao_informado" && urgencyQuestionWasAsked) {
+    if (hasAny(normalizedLast, ["agora", "rapido", "urgente", "essa semana", "quanto antes", "logo"])) state.urgency = "alta";
+    else if (hasAny(normalizedLast, ["pesquisando", "sem pressa", "futuro", "mais pra frente"])) state.urgency = "baixa";
+    else if (lastInbound) state.urgency = "media";
+  }
+
+  let phase: SdrPhase = "ask_business";
+  let nextQuestion = "qual é o tipo do seu negócio?";
+  let suggestedReply = `Oi, ${first}! Aqui é da Next Lead. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
+  let shouldHandoff = false;
+  let handoffReason = "Ainda faltam informações para qualificar o lead.";
+
+  if (state.handoffReady || state.phase === "handoff") {
+    phase = "handoff";
+    shouldHandoff = true;
+    handoffReason = "Lead já foi entregue para atendimento humano.";
+    suggestedReply = `Perfeito, ${first}. Já encaminhei seu atendimento para a equipe da Next Lead te orientar por aqui.`;
+    nextQuestion = "aguardar atendimento humano";
+  } else if (!state.businessType) {
+    phase = "ask_business";
+  } else if (state.hasWebsite === "nao_informado") {
+    phase = "ask_presence";
+    nextQuestion = "hoje você já tem site ou landing page, ou usa mais Instagram/WhatsApp?";
+    suggestedReply = `Legal, ${first}. Hoje você já tem site ou landing page, ou usa mais Instagram/WhatsApp?`;
+  } else if (state.wantsWhatsAppLeads === "nao_informado") {
+    phase = "ask_goal";
+    nextQuestion = "seu objetivo é receber mais pedidos de orçamento direto no WhatsApp?";
+    suggestedReply = state.hasWebsite === "sim"
+      ? `Entendi. Você quer usar essa página para receber mais pedidos de orçamento direto no WhatsApp?`
+      : `Entendi. O objetivo seria receber mais pedidos de orçamento direto no WhatsApp?`;
+  } else if (state.wantsWhatsAppLeads === "sim" && state.urgency === "nao_informado") {
+    phase = "ask_urgency";
+    nextQuestion = "você quer começar isso com urgência ou está só pesquisando por enquanto?";
+    suggestedReply = `Boa. Você quer começar isso com mais urgência ou está só pesquisando por enquanto?`;
+  } else if (state.wantsWhatsAppLeads === "sim") {
+    phase = "handoff";
+    shouldHandoff = true;
+    state.handoffReady = true;
+    state.handoffAt = state.handoffAt || new Date().toISOString();
+    nextQuestion = "vendedor deve enviar protótipo/sugestão";
+    handoffReason = "Lead informou negócio e interesse em captar orçamentos pelo WhatsApp.";
+    suggestedReply = `Perfeito, ${first}. Pelo que você me falou, faz sentido a gente te mostrar uma ideia/protótipo da página. Vou encaminhar para alguém da Next Lead te orientar e preparar uma sugestão para o seu negócio.`;
+  } else {
+    phase = "paused";
+    nextQuestion = "sem interesse confirmado";
+    suggestedReply = `Entendi, ${first}. Se em algum momento você quiser captar mais contatos pelo WhatsApp, a Next Lead pode te mostrar uma ideia simples para o seu negócio.`;
+    handoffReason = "Lead não confirmou interesse em captar orçamentos pelo WhatsApp.";
+  }
+
+  state.phase = phase;
+  const temperature: LeadTemperature = shouldHandoff
+    ? "quente"
+    : state.wantsWhatsAppLeads === "sim"
+      ? "morno"
+      : state.businessType
+        ? "morno"
+        : "frio";
+
+  const summaryParts = [
+    `${contact?.name || "Lead"} está em ${pipeline?.name || "funil não definido"}${stage?.title ? ` / ${stage.title}` : ""}.`,
+    state.businessType ? `Negócio: ${state.businessType}.` : "Negócio ainda não identificado.",
+    state.hasWebsite === "nao_informado" ? "Site/landing ainda não informado." : state.hasWebsite === "sim" ? "Já indicou ter site/landing." : "Ainda não tem site/landing clara.",
+    state.wantsWhatsAppLeads === "sim" ? "Quer captar pelo WhatsApp." : state.wantsWhatsAppLeads === "nao" ? "Não confirmou interesse em WhatsApp." : "Interesse em WhatsApp ainda não confirmado.",
+    `Fase SDR: ${phase}.`,
+  ];
+
+  return {
+    state,
+    shouldPauseAfterHandoff: phase === "handoff",
+    analysis: {
+      summary: summaryParts.join(" "),
+      suggestedReply: forceOneQuestion(suggestedReply),
+      nextQuestion,
+      temperature,
+      suggestedStageHint: shouldHandoff ? "Briefing recebido / Diagnóstico" : phase === "ask_presence" ? "Contato feito" : "Novo lead",
+      shouldHandoff,
+      handoffReason,
+      extracted: {
+        businessType: state.businessType,
+        hasWebsite: state.hasWebsite || "nao_informado",
+        wantsWhatsAppLeads: state.wantsWhatsAppLeads || "nao_informado",
+        urgency: state.urgency === "nao_informado" ? "media" : state.urgency,
+      },
+    },
+  };
+}
+
+async function polishSdrReplyWithGemini(input: { analysis: SdrAnalysis; state: SdrState; contact?: Contact }) {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) return input.analysis;
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const prompt = `Reescreva a mensagem abaixo como WhatsApp comercial da Next Lead, sem mudar o objetivo nem a pergunta.
+
+Regras:
+- Nunca diga que é IA.
+- Não invente preço, prazo ou garantia.
+- Mantenha uma pergunta só.
+- Máximo 2 linhas.
+- Se a fase for handoff, deixe claro que alguém da equipe vai orientar e preparar uma sugestão/protótipo.
+
+Fase: ${input.state.phase}
+Mensagem base: ${input.analysis.suggestedReply}
+
+Responda somente a mensagem final.`;
+
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.25, maxOutputTokens: 180 },
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    const text = payload?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join(" ").trim();
+    if (!response.ok || !text) return input.analysis;
+    return {
+      ...input.analysis,
+      suggestedReply: forceOneQuestion(text),
+      geminiUsage: {
+        promptTokenCount: payload?.usageMetadata?.promptTokenCount,
+        candidatesTokenCount: payload?.usageMetadata?.candidatesTokenCount,
+        totalTokenCount: payload?.usageMetadata?.totalTokenCount,
+      },
+    } as SdrAnalysis;
+  } catch {
+    return input.analysis;
+  }
 }
 
 
@@ -416,7 +771,7 @@ function refineSdrAnalysis(input: {
   let nextQuestion = analysis.nextQuestion || "qual é o tipo do seu negócio?";
   let suggestedReply = analysis.suggestedReply || "";
 
-  if (!businessType || isGreetingOnly(lastInbound)) {
+  if (!businessType) {
     nextQuestion = "qual é o tipo do seu negócio?";
     suggestedReply = `Oi, ${first}! Aqui é da Next Lead. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
     analysis.temperature = analysis.temperature === "quente" ? "morno" : analysis.temperature || "frio";
@@ -465,14 +820,24 @@ async function hasRecentHumanTakeover(
   });
 }
 
-function shouldSkipBecauseRecentRun(runs: any[], mode: AutomationMode) {
+function shouldSkipBecauseRecentRun(runs: any[], mode: AutomationMode, latestInboundText?: string) {
   if (mode !== "auto") return false;
-  const cooldownMs = Number(process.env.NEXTLEAD_AUTO_SDR_COOLDOWN_SECONDS || 35) * 1000;
+  const cooldownSeconds = Number(process.env.NEXTLEAD_AUTO_SDR_COOLDOWN_SECONDS || 8);
+  const cooldownMs = Math.max(3, cooldownSeconds) * 1000;
   const now = Date.now();
+  const latest = compactText(latestInboundText || "").toLowerCase();
+
   return (runs || []).some((run) => {
     const created = new Date(run.created_at || 0).getTime();
     if (!created || Number.isNaN(created)) return false;
-    return now - created < cooldownMs && String(run.status || "") === "success";
+    if (now - created >= cooldownMs || String(run.status || "") !== "success") return false;
+
+    const previousInbound = compactText(run.output?.lastInboundText || run.input?.lastInboundText || "").toLowerCase();
+    // Se for exatamente a mesma mensagem chegando duplicada pela Evolution, ignora.
+    if (latest && previousInbound && latest === previousInbound) return true;
+
+    // Para runs antigos sem latestInboundText, mantém uma trava curtíssima para evitar resposta dupla.
+    return !previousInbound && now - created < 3000;
   });
 }
 
@@ -563,27 +928,6 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
     });
   }
 
-  const recentRuns = await applyTenantFilter(
-    supabase
-      .from("automation_runs")
-      .select("id,status,summary,created_at")
-      .eq("contact_id", contact.id)
-      .order("created_at", { ascending: false })
-      .limit(3),
-    tenant,
-  );
-
-  if (shouldSkipBecauseRecentRun(recentRuns.data || [], mode)) {
-    await insertAutomationRun(supabase, tenant, {
-      automation_id: automation?.id || automationId,
-      contact_id: contact.id,
-      status: "skipped",
-      summary: "SDR automático ignorado por cooldown anti-duplicidade.",
-      input: { contactId: contact.id, mode, source: input.source || "manual" },
-    });
-    return { ok: true, skipped: true, mode, sent: false, reason: "Cooldown anti-duplicidade." };
-  }
-
   if (input.source === "webhook" && automation?.conditions?.avoidHumanTakeover !== false && await hasRecentHumanTakeover(supabase, tenant, contact.id)) {
     await insertAutomationRun(supabase, tenant, {
       automation_id: automation?.id || automationId,
@@ -645,12 +989,61 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
     tenant,
   );
   const messages = (messagesResult.data || []).map(mapMessageRow).reverse();
+  const latestInboundText = compactText(messages.filter((message) => message.direction === "inbound").at(-1)?.body || "");
 
-  const agentInstructions = `${String(automation?.actions?.agentInstructions || process.env.NEXTLEAD_SDR_PROMPT || defaultSdrAgentInstructions).trim()}${buildSdrHardGuardrails()}`;
-  const rawAnalysis = process.env.GEMINI_API_KEY
-    ? await analyzeSdrWithGemini({ contact, deal, stage, pipeline, messages, agentInstructions })
-    : analyzeSdrLocally({ contact, deal, stage, pipeline, messages });
-  const analysis = refineSdrAnalysis({ analysis: rawAnalysis, contact, messages });
+  const recentRuns = await applyTenantFilter(
+    supabase
+      .from("automation_runs")
+      .select("id,status,summary,input,output,created_at")
+      .eq("contact_id", contact.id)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    tenant,
+  );
+
+  if (shouldSkipBecauseRecentRun(recentRuns.data || [], mode, latestInboundText)) {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      contact_id: contact.id,
+      status: "skipped",
+      summary: "SDR automático ignorado por evento duplicado/cooldown curto.",
+      input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText },
+    });
+    return { ok: true, skipped: true, mode, sent: false, reason: "Cooldown anti-duplicidade curto." };
+  }
+
+  const stateLoad = await loadSdrState(supabase, tenant, contact.id);
+  const stateMachine = computeSdrStateMachine({ contact, deal, stage, pipeline, messages, previousState: stateLoad.state });
+  let analysis = await polishSdrReplyWithGemini({ analysis: stateMachine.analysis, state: stateMachine.state, contact });
+
+  if (input.source === "webhook" && stateLoad.state?.phase === "handoff") {
+    await insertAutomationRun(supabase, tenant, {
+      automation_id: automation?.id || automationId,
+      contact_id: contact.id,
+      deal_id: deal?.id || null,
+      status: "skipped",
+      summary: "SDR pausado: lead já foi entregue para vendedor enviar protótipo/sugestão.",
+      input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText },
+      output: { state: stateLoad.state },
+    });
+    return { ok: true, skipped: true, mode, sent: false, reason: "Lead já entregue para atendimento humano." };
+  }
+
+  if (stateLoad.tableReady) {
+    const savedState = await saveSdrState(supabase, tenant, stateMachine.state);
+    if (!savedState.ok) {
+      await insertAutomationRun(supabase, tenant, {
+        automation_id: automation?.id || automationId,
+        contact_id: contact.id,
+        deal_id: deal?.id || null,
+        status: "error",
+        summary: "SDR executou, mas não conseguiu salvar o estado da conversa.",
+        input: { contactId: contact.id, mode, source: input.source || "manual", lastInboundText: latestInboundText },
+        output: { state: stateMachine.state, analysis },
+        error: savedState.error || "Erro desconhecido ao salvar sdr_states.",
+      });
+    }
+  }
 
   if (mode === "auto" && !isAutoSdrGloballyEnabled()) {
     await insertAutomationRun(supabase, tenant, {
@@ -660,7 +1053,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
       status: "skipped",
       summary: "SDR em automático, mas NEXTLEAD_ENABLE_AUTO_SDR não está true no deploy.",
       input: { contactId: contact.id, mode, source: input.source || "manual" },
-      output: { ...analysis, autoSendEnabled: false },
+      output: { ...analysis, autoSendEnabled: false, latestInboundText },
     });
     return { ok: true, skipped: true, mode, sent: false, reason: "NEXTLEAD_ENABLE_AUTO_SDR não está true no deploy.", analysis };
   }
@@ -718,7 +1111,7 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
         status: "error",
         summary: "Falha ao enviar resposta automática do SDR.",
         input: { contactId: contact.id, mode, source: input.source || "manual" },
-        output: analysis,
+        output: { ...analysis, latestInboundText },
         error: error.message,
       });
       return { ok: false, status: 500, error: error.message, mode, sent: false, analysis };
@@ -731,8 +1124,8 @@ export async function runSdrAutomationForContact(input: RunSdrAutomationInput) {
     deal_id: deal?.id || null,
     status: "success",
     summary: sent ? "IA SDR respondeu automaticamente." : "IA SDR gerou sugestão de atendimento.",
-    input: { contactId: contact.id, mode, source: input.source || "manual" },
-    output: { ...analysis, autoSendEnabled: isAutoSdrGloballyEnabled(), providerMessageId },
+    input: { contactId: contact.id, mode, source: input.source || "manual", latestInboundText },
+    output: { ...analysis, autoSendEnabled: isAutoSdrGloballyEnabled(), providerMessageId, latestInboundText },
   });
 
   if (automation?.id) {
@@ -773,7 +1166,7 @@ export function analyzeSdrLocally(input: {
 
   const suggestedReply = shouldHandoff
     ? `Perfeito, ${first}. Pelo que você me falou, faz sentido a equipe da Next Lead avaliar o melhor caminho para captar mais contatos pelo WhatsApp. Vou encaminhar para alguém te orientar.`
-    : !businessType || isGreetingOnly(lastInbound)
+    : !businessType
       ? `Oi, ${first}! Aqui é da Next Lead. Pra eu te orientar melhor: qual é o tipo do seu negócio?`
       : `Legal, ${first}. ${missingQuestion.charAt(0).toUpperCase()}${missingQuestion.slice(1)}`;
 
@@ -857,7 +1250,17 @@ Formato obrigatório:
     const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!response.ok || !text) return local;
     const parsed = JSON.parse(text);
-    return { ...local, ...parsed, extracted: { ...local.extracted, ...(parsed.extracted || {}) } } as SdrAnalysis;
+    const usage = payload?.usageMetadata || {};
+    return {
+      ...local,
+      ...parsed,
+      extracted: { ...local.extracted, ...(parsed.extracted || {}) },
+      geminiUsage: {
+        promptTokenCount: usage.promptTokenCount,
+        candidatesTokenCount: usage.candidatesTokenCount,
+        totalTokenCount: usage.totalTokenCount,
+      },
+    } as SdrAnalysis;
   } catch {
     return local;
   }
