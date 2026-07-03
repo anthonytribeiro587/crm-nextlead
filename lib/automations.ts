@@ -66,7 +66,9 @@ Regras obrigatórias:
 - Nunca diga que é IA, robô, modelo, automação ou assistente virtual.
 - Apresente-se como atendimento da Next Lead somente quando fizer sentido.
 - Seja curto, natural e comercial, como conversa real de WhatsApp.
+- Use linguagem de leigo. Se falar em landing page, explique como “uma página simples para apresentar seu serviço e levar o cliente para o WhatsApp”.
 - Sempre avance a qualificação. Não responda apenas “olá, tudo bem?” se ainda falta informação.
+- Se o lead disser “não entendi”, “começar o quê?” ou “como assim?”, explique o passo em palavras simples e refaça a pergunta certa.
 - Faça no máximo uma pergunta por mensagem.
 - Não prometa preço fechado, prazo fechado, garantia de clientes ou resultado garantido.
 - Não invente informações que o lead não passou.
@@ -282,9 +284,15 @@ function inferHasWebsite(text: string): SdrAnalysis["extracted"]["hasWebsite"] {
 }
 
 function inferWantsWhatsappLeads(text: string): SdrAnalysis["extracted"]["wantsWhatsAppLeads"] {
-  const lower = text.toLowerCase();
-  if (hasAny(lower, ["whatsapp", "zap", "orçamento", "orcamento", "mais clientes", "leads", "chamar", "mensagem"])) return "sim";
-  if (hasAny(lower, ["não quero whatsapp", "nao quero whatsapp", "só catálogo", "so catalogo"])) return "nao";
+  const lower = normalizeBasic(text);
+  if (hasAny(lower, ["nao quero whatsapp", "nao quero zap", "so catalogo", "so catalogo", "nao preciso de cliente", "nao quero mais cliente"])) return "nao";
+
+  // Não trate a palavra “WhatsApp” sozinha como desejo de captar leads.
+  // Em respostas como “uso WhatsApp”, geralmente o lead só está dizendo o canal atual.
+  const intentWords = ["quero", "preciso", "gostaria", "objetivo", "mais", "captar", "receber", "gerar", "orcamento", "orcamentos", "cliente", "clientes", "lead", "leads", "pedido", "pedidos", "chamar"];
+  const channelWords = ["whatsapp", "whats", "zap", "mensagem", "direct"];
+  if (hasAny(lower, intentWords) && (hasAny(lower, channelWords) || hasAny(lower, ["orcamento", "orcamentos", "cliente", "clientes", "lead", "leads"]))) return "sim";
+  if (hasAny(lower, ["sim quero", "sim preciso", "quero sim", "isso mesmo", "exatamente", "pode ser", "fechado"])) return "sim";
   return "nao_informado";
 }
 
@@ -342,6 +350,43 @@ function inferUrgency(text: string): "baixa" | "media" | "alta" | "nao_informado
   if (hasAny(t, ["sem pressa", "futuramente", "mais pra frente", "so pesquisando", "só pesquisando", "nao tenho pressa"])) return "baixa";
   if (hasAny(t, ["mes", "mês", "semana que vem", "proximo", "próximo"])) return "media";
   return "nao_informado";
+}
+
+function isConfusionMessage(text: string) {
+  const t = normalizeBasic(text);
+  return hasAny(t, [
+    "nao entendi",
+    "n entendi",
+    "nao entendi direito",
+    "como assim",
+    "comecar oq",
+    "comecar o que",
+    "começar oq",
+    "começar o que",
+    "que seria",
+    "o que e isso",
+    "o que é isso",
+    "landing page o que e",
+    "landing page o que é",
+    "nao sei o que e",
+    "nao sei o que é",
+  ]);
+}
+
+function educationalReplyForPhase(phase: SdrPhase, first: string, state: Partial<SdrState>) {
+  if (phase === "ask_business") {
+    return `Claro, ${first}. A Next Lead ajuda negócios a receberem mais contatos pelo WhatsApp através de uma página simples de divulgação. Qual é o tipo do seu negócio?`;
+  }
+  if (phase === "ask_presence") {
+    return `Claro. Landing page é uma página simples que apresenta seu serviço e leva o cliente direto para o WhatsApp. Hoje você já tem alguma página ou atende só por Instagram/WhatsApp?`;
+  }
+  if (phase === "ask_goal") {
+    return `A ideia é facilitar para mais pessoas pedirem orçamento pelo seu WhatsApp, sem depender só de indicação ou post no Instagram. Esse é o objetivo para o seu negócio?`;
+  }
+  if (phase === "ask_urgency") {
+    return `Começar seria a equipe montar uma sugestão/protótipo da página para você avaliar antes de fechar qualquer coisa. Você quer ver essa sugestão agora ou está só pesquisando por enquanto?`;
+  }
+  return `Sem problema, ${first}. Vou simplificar: a gente entende seu negócio e prepara uma sugestão de página para atrair contatos pelo WhatsApp. Quer que eu encaminhe para alguém da equipe te orientar?`;
 }
 
 function isLikelyBusinessAnswer(text: string) {
@@ -511,9 +556,10 @@ function computeSdrStateMachine(input: {
 
   let phase: SdrPhase = "ask_business";
   let nextQuestion = "qual é o tipo do seu negócio?";
-  let suggestedReply = `Oi, ${first}! Aqui é da Next Lead. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
+  let suggestedReply = `Oi, ${first}! Aqui é da Next Lead. A gente cria uma página simples para apresentar seu serviço e levar clientes direto para o WhatsApp. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
   let shouldHandoff = false;
   let handoffReason = "Ainda faltam informações para qualificar o lead.";
+  const confused = isConfusionMessage(lastInbound);
 
   if (state.handoffReady || state.phase === "handoff") {
     phase = "handoff";
@@ -525,18 +571,18 @@ function computeSdrStateMachine(input: {
     phase = "ask_business";
   } else if (state.hasWebsite === "nao_informado") {
     phase = "ask_presence";
-    nextQuestion = "hoje você já tem site ou landing page, ou usa mais Instagram/WhatsApp?";
-    suggestedReply = `Legal, ${first}. Hoje você já tem site ou landing page, ou usa mais Instagram/WhatsApp?`;
+    nextQuestion = "hoje você já tem uma página/site, ou atende mais pelo Instagram e WhatsApp?";
+    suggestedReply = `Legal, ${first}. Pra eu entender seu momento: hoje você já tem uma página/site, ou atende mais pelo Instagram e WhatsApp?`;
   } else if (state.wantsWhatsAppLeads === "nao_informado") {
     phase = "ask_goal";
     nextQuestion = "seu objetivo é receber mais pedidos de orçamento direto no WhatsApp?";
     suggestedReply = state.hasWebsite === "sim"
-      ? `Entendi. Você quer usar essa página para receber mais pedidos de orçamento direto no WhatsApp?`
-      : `Entendi. O objetivo seria receber mais pedidos de orçamento direto no WhatsApp?`;
+      ? `Entendi. A ideia seria usar essa página para gerar mais pedidos de orçamento no WhatsApp. Esse é seu objetivo?`
+      : `Entendi. Então a ideia seria criar uma página simples para apresentar seu serviço e trazer mais pedidos de orçamento no WhatsApp. Esse é seu objetivo?`;
   } else if (state.wantsWhatsAppLeads === "sim" && state.urgency === "nao_informado") {
     phase = "ask_urgency";
-    nextQuestion = "você quer começar isso com urgência ou está só pesquisando por enquanto?";
-    suggestedReply = `Boa. Você quer começar isso com mais urgência ou está só pesquisando por enquanto?`;
+    nextQuestion = "você quer ver uma sugestão/protótipo agora ou está só pesquisando por enquanto?";
+    suggestedReply = `Boa. O próximo passo seria alguém da Next Lead montar uma sugestão/protótipo para você visualizar. Você quer ver isso agora ou está só pesquisando por enquanto?`;
   } else if (state.wantsWhatsAppLeads === "sim") {
     phase = "handoff";
     shouldHandoff = true;
@@ -550,6 +596,15 @@ function computeSdrStateMachine(input: {
     nextQuestion = "sem interesse confirmado";
     suggestedReply = `Entendi, ${first}. Se em algum momento você quiser captar mais contatos pelo WhatsApp, a Next Lead pode te mostrar uma ideia simples para o seu negócio.`;
     handoffReason = "Lead não confirmou interesse em captar orçamentos pelo WhatsApp.";
+  }
+
+  if (confused && !state.handoffReady) {
+    const explainPhase = state.phase === "handoff" ? phase : (previousState?.phase || phase);
+    phase = explainPhase === "paused" ? "ask_goal" : explainPhase;
+    suggestedReply = educationalReplyForPhase(phase, first, state);
+    nextQuestion = suggestedReply.includes("?") ? suggestedReply.slice(suggestedReply.lastIndexOf(".") + 1).trim() || nextQuestion : nextQuestion;
+    shouldHandoff = false;
+    handoffReason = "Lead pediu explicação; SDR deve simplificar antes de avançar.";
   }
 
   state.phase = phase;
@@ -600,7 +655,9 @@ Regras:
 - Nunca diga que é IA.
 - Não invente preço, prazo ou garantia.
 - Mantenha uma pergunta só.
-- Máximo 2 linhas.
+- Máximo 3 linhas.
+- Use linguagem simples para leigos.
+- Se falar em landing page, explique como página simples para apresentar o serviço e levar ao WhatsApp.
 - Se a fase for handoff, deixe claro que alguém da equipe vai orientar e preparar uma sugestão/protótipo.
 
 Fase: ${input.state.phase}
@@ -773,17 +830,17 @@ function refineSdrAnalysis(input: {
 
   if (!businessType) {
     nextQuestion = "qual é o tipo do seu negócio?";
-    suggestedReply = `Oi, ${first}! Aqui é da Next Lead. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
+    suggestedReply = `Oi, ${first}! Aqui é da Next Lead. A gente cria uma página simples para apresentar seu serviço e levar clientes direto para o WhatsApp. Pra eu te orientar melhor: qual é o tipo do seu negócio?`;
     analysis.temperature = analysis.temperature === "quente" ? "morno" : analysis.temperature || "frio";
     analysis.shouldHandoff = false;
     analysis.handoffReason = "Ainda falta identificar o tipo de negócio do lead.";
   } else if (hasWebsite === "nao_informado") {
-    nextQuestion = "hoje você já tem site ou landing page, ou usa mais Instagram/WhatsApp?";
-    suggestedReply = `Legal, ${first}. Hoje você já tem site ou landing page, ou usa mais Instagram/WhatsApp?`;
+    nextQuestion = "hoje você já tem uma página/site, ou atende mais pelo Instagram e WhatsApp?";
+    suggestedReply = `Legal, ${first}. Pra eu entender seu momento: hoje você já tem uma página/site, ou atende mais pelo Instagram e WhatsApp?`;
     analysis.shouldHandoff = false;
   } else if (wantsWhatsAppLeads === "nao_informado") {
     nextQuestion = "seu objetivo é receber mais pedidos de orçamento direto no WhatsApp?";
-    suggestedReply = `Entendi. Seu objetivo é receber mais pedidos de orçamento direto no WhatsApp?`;
+    suggestedReply = `Entendi. A ideia da página é facilitar para mais pessoas pedirem orçamento no WhatsApp. Esse é seu objetivo?`;
     analysis.shouldHandoff = false;
   } else if (analysis.shouldHandoff) {
     suggestedReply = `Perfeito, ${first}. Pelo que você me falou, faz sentido a equipe da Next Lead avaliar o melhor caminho para captar mais contatos pelo WhatsApp. Vou encaminhar para alguém te orientar.`;
@@ -1155,7 +1212,7 @@ export function analyzeSdrLocally(input: {
   const urgency: SdrAnalysis["extracted"]["urgency"] = hasAny(allText, ["urgente", "essa semana", "quanto antes", "hoje", "preciso"]) ? "alta" : inbound.length >= 3 ? "media" : "baixa";
 
   let missingQuestion = "qual é o tipo do seu negócio?";
-  if (businessType) missingQuestion = "hoje você já tem site ou landing page, ou usa mais Instagram/WhatsApp?";
+  if (businessType) missingQuestion = "hoje você já tem uma página/site, ou atende mais pelo Instagram e WhatsApp?";
   if (businessType && hasWebsite !== "nao_informado") missingQuestion = "seu objetivo é receber mais pedidos de orçamento direto no WhatsApp?";
   if (businessType && hasWebsite !== "nao_informado" && wantsWhatsAppLeads !== "nao_informado") missingQuestion = "quer que eu encaminhe para uma avaliação com a equipe da Next Lead?";
 
@@ -1167,7 +1224,7 @@ export function analyzeSdrLocally(input: {
   const suggestedReply = shouldHandoff
     ? `Perfeito, ${first}. Pelo que você me falou, faz sentido a equipe da Next Lead avaliar o melhor caminho para captar mais contatos pelo WhatsApp. Vou encaminhar para alguém te orientar.`
     : !businessType
-      ? `Oi, ${first}! Aqui é da Next Lead. Pra eu te orientar melhor: qual é o tipo do seu negócio?`
+      ? `Oi, ${first}! Aqui é da Next Lead. A gente cria uma página simples para apresentar seu serviço e levar clientes direto para o WhatsApp. Pra eu te orientar melhor: qual é o tipo do seu negócio?`
       : `Legal, ${first}. ${missingQuestion.charAt(0).toUpperCase()}${missingQuestion.slice(1)}`;
 
   const summaryParts = [
@@ -1215,7 +1272,10 @@ Importante para suggestedReply:
 - Se a última mensagem for só cumprimento, responda com uma saudação curta e pergunte o tipo do negócio.
 - Não responda só “Olá, tudo bem?”. A resposta precisa avançar a qualificação.
 - Use no máximo uma pergunta.
-- Mantenha a resposta com 1 a 2 linhas de WhatsApp.
+- Use linguagem simples para leigos. Se citar landing page, explique como uma página simples que apresenta o serviço e leva para o WhatsApp.
+- Não considere “uso WhatsApp” como interesse em captar leads; isso pode ser só o canal atual. Confirme o objetivo antes.
+- Se o lead disser “não entendi” ou “começar o quê?”, explique o passo em palavras simples.
+- Mantenha a resposta com 1 a 3 linhas de WhatsApp.
 
 Contexto:
 Contato: ${input.contact?.name || "Lead"} - ${input.contact?.company || input.contact?.source || "sem empresa"}
