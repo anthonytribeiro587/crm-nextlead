@@ -401,7 +401,8 @@ function educationalReplyForPhase(phase: SdrPhase, first: string, state: Partial
 function isLikelyBusinessAnswer(text: string) {
   const t = normalizeBasic(text);
   if (!t || isGreetingOnly(t)) return false;
-  if (["sim", "nao", "isso", "tenho isso", "whatsapp", "zap", "instagram", "insta", "google", "site", "landing"].includes(t)) return false;
+  if (["sim", "s", "nao", "não", "isso", "tenho", "tenho sim", "tenho isso", "nao tenho", "não tenho", "nao tenho site", "não tenho site", "sem site", "whatsapp", "zap", "instagram", "insta", "google", "site", "landing"].includes(t)) return false;
+  if (hasAny(t, ["nao tenho", "não tenho", "sem site", "so whatsapp", "só whatsapp", "so instagram", "só instagram"])) return false;
   return t.length >= 4 && /[a-z]/.test(t);
 }
 
@@ -426,6 +427,48 @@ function isShortYes(text: string) {
 
 function isShortNo(text: string) {
   return isNegative(text) && normalizeBasic(text).length <= 18;
+}
+
+function inferPhaseFromOutboundText(text: string): SdrPhase | undefined {
+  const t = normalizeBasic(text);
+  if (!t) return undefined;
+  if (hasAny(t, ["tipo do seu negocio", "tipo do negócio", "qual e o tipo do seu negocio", "qual é o tipo do seu negócio"])) return "ask_business";
+  if (hasAny(t, ["pagina/site", "página/site", "site ou landing", "instagram e whatsapp", "instagram/whatsapp", "atende mais pelo instagram"])) return "ask_presence";
+  if (hasAny(t, ["esse e seu objetivo", "esse é seu objetivo", "receber mais pedidos", "receber mais clientes", "pedirem orcamento", "pedirem orçamento", "captar mais"])) return "ask_goal";
+  if (hasAny(t, ["prototipo", "protótipo", "sugestao", "sugestão", "esta so pesquisando", "está só pesquisando", "visualizar agora"])) return "ask_urgency";
+  if (hasAny(t, ["vou encaminhar", "alguem te orientar", "alguém te orientar", "preparar uma ideia", "preparar uma sugestao", "preparar uma sugestão"])) return "handoff";
+  return undefined;
+}
+
+function deriveSdrStateFromConversation(input: { contact?: Contact; deal?: Deal; messages: Message[] }): SdrState | undefined {
+  const { contact, deal, messages } = input;
+  const lastOutbound = messages.filter((message) => message.direction === "outbound").at(-1);
+  const inferredPhase = inferPhaseFromOutboundText(lastOutbound?.body || "");
+  if (!inferredPhase) return undefined;
+
+  const inboundMessages = messages.filter((message) => message.direction === "inbound");
+  const latestInbound = compactText(inboundMessages.at(-1)?.body || "");
+  const previousInboundText = inboundMessages.slice(0, -1).map((message) => message.body).join(" \n ");
+  const allInboundText = inboundMessages.map((message) => message.body).join(" \n ");
+  const businessSource = inferredPhase === "ask_business" ? allInboundText : previousInboundText || allInboundText;
+  const businessType = inferBusinessFromAnswer(businessSource, contact) || inferBusinessType(businessSource, contact);
+  const hasWebsite = inferHasWebsite(allInboundText);
+  const wantsWhatsAppLeads = inferWantsWhatsappLeads(allInboundText);
+  const urgency = inferUrgency(allInboundText);
+  const channels = inferChannels(allInboundText);
+
+  return {
+    contactId: contact?.id || "",
+    dealId: deal?.id,
+    phase: inferredPhase,
+    businessType,
+    hasWebsite,
+    currentChannels: channels,
+    wantsWhatsAppLeads,
+    urgency,
+    handoffReady: inferredPhase === "handoff",
+    lastInboundText: latestInbound,
+  };
 }
 
 
@@ -525,21 +568,23 @@ function computeSdrStateMachine(input: {
   const lastInbound = compactText(inbound.at(-1)?.body || "");
   const normalizedLast = normalizeBasic(lastInbound);
   const first = compactText(contact?.name).split(" ")[0] || "tudo bem";
-  const previousPhase = previousState?.phase || "ask_business";
+  const derivedState = previousState || deriveSdrStateFromConversation({ contact, deal, messages });
+  const previousPhase = derivedState?.phase || "ask_business";
 
-  // Versão determinística: o estado salvo manda no fluxo. O histórico antigo só é usado
-  // como apoio inicial, para não puxar respostas antigas e confundir a conversa atual.
+  // Versão determinística: o estado salvo manda no fluxo. Se a tabela sdr_states ainda
+  // não estiver pronta, o CRM reconstrói a fase pela última pergunta enviada. Isso evita
+  // respostas como “não tenho” serem confundidas com tipo de negócio.
   const state: SdrState = {
-    contactId: contact?.id || previousState?.contactId || "",
-    dealId: deal?.id || previousState?.dealId,
+    contactId: contact?.id || derivedState?.contactId || "",
+    dealId: deal?.id || derivedState?.dealId,
     phase: previousPhase,
-    businessType: previousState?.businessType,
-    hasWebsite: previousState?.hasWebsite || "nao_informado",
-    currentChannels: previousState?.currentChannels || [],
-    wantsWhatsAppLeads: previousState?.wantsWhatsAppLeads || "nao_informado",
-    urgency: previousState?.urgency || "nao_informado",
-    handoffReady: previousState?.handoffReady || false,
-    handoffAt: previousState?.handoffAt,
+    businessType: derivedState?.businessType,
+    hasWebsite: derivedState?.hasWebsite || "nao_informado",
+    currentChannels: derivedState?.currentChannels || [],
+    wantsWhatsAppLeads: derivedState?.wantsWhatsAppLeads || "nao_informado",
+    urgency: derivedState?.urgency || "nao_informado",
+    handoffReady: derivedState?.handoffReady || false,
+    handoffAt: derivedState?.handoffAt,
     lastInboundText: lastInbound,
     id: previousState?.id,
   };
