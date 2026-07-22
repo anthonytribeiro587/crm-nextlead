@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { persistEvolutionWebhook } from "@/lib/evolution-webhook";
 import { ensureDefaultPipeline } from "@/lib/default-pipeline";
+import { processJrWhatsappTrial } from "@/lib/jr-whatsapp-trial";
 
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status });
@@ -144,6 +145,14 @@ export async function POST(request: NextRequest) {
     const requiredSecret = process.env.WHATSAPP_WEBHOOK_SECRET;
     if (requiredSecret && getProvidedSecret(request) !== requiredSecret) {
       return json({ error: "Webhook secret inválido." }, 401);
+    }
+
+    const jrTrial = await processJrWhatsappTrial(payload);
+    if (jrTrial.handled) {
+      return json(
+        { received: true, provider: "evolution", mode: "jr_trial", ...jrTrial },
+        jrTrial.ok === false ? 500 : 200,
+      );
     }
 
     const result = await persistEvolutionWebhook(payload);
