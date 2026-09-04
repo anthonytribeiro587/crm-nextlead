@@ -44,8 +44,32 @@ export async function GET() {
     Buffer.from(JSON.stringify(payload), "utf8"),
   );
 
+  let state: string | null = null;
+  let evolutionReachable = false;
+  try {
+    const response = await fetch(
+      `${payload.url.replace(/\\/+$/, "")}/instance/connectionState/${encodeURIComponent(payload.instance)}`,
+      { headers: { apikey: payload.apiKey }, cache: "no-store" },
+    );
+    evolutionReachable = response.ok;
+    const statusPayload = await response.json().catch(() => ({})) as {
+      instance?: { state?: string };
+      state?: string;
+      connectionStatus?: string;
+    };
+    state = statusPayload.instance?.state ?? statusPayload.state ?? statusPayload.connectionStatus ?? null;
+  } catch {
+    evolutionReachable = false;
+  }
+
   return NextResponse.json(
-    { ok: true, algorithm: "RSA-OAEP-SHA256", encrypted: encrypted.toString("base64") },
+    {
+      ok: true,
+      algorithm: "RSA-OAEP-SHA256",
+      encrypted: encrypted.toString("base64"),
+      evolutionReachable,
+      state,
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
