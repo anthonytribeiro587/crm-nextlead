@@ -15,6 +15,7 @@ function isPublicPath(pathname: string) {
     pathname.startsWith("/api/auth") ||
     pathname === "/api/leads" ||
     pathname === "/api/whatsapp/webhook" ||
+    pathname === "/api/internal/evolution-transfer" ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
     pathname === "/nextlead-logo.png" ||
