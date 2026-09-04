@@ -48,7 +48,7 @@ export async function GET() {
   let evolutionReachable = false;
   try {
     const response = await fetch(
-      `${payload.url.replace(/\\/+$/, "")}/instance/connectionState/${encodeURIComponent(payload.instance)}`,
+      `${payload.url.replace(/\/+$/, "")}/instance/connectionState/${encodeURIComponent(payload.instance)}`,
       { headers: { apikey: payload.apiKey }, cache: "no-store" },
     );
     evolutionReachable = response.ok;
