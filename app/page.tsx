@@ -2,259 +2,193 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
+import {
+  ArrowRight, CalendarClock, ClipboardList,
+  FileText, KanbanSquare, MessageCircle,
+} from "lucide-react";
 import { getCrmData } from "@/lib/data";
 import { money, shortDate } from "@/lib/format";
 
-function startOfDay(date = new Date()) {
-  const result = new Date(date);
-  result.setHours(0, 0, 0, 0);
-  return result;
+function isSameDay(value: string, date: Date) {
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toDateString() === date.toDateString();
 }
 
-function activityKey(activity: { contactId: string; title: string; dueAt: string; done: boolean }) {
-  const date = new Date(activity.dueAt);
-  const day = Number.isNaN(date.getTime()) ? activity.dueAt.slice(0, 10) : date.toISOString().slice(0, 10);
-  return `${activity.contactId}:${activity.title}:${day}:${activity.done ? "done" : "pending"}`;
+function safeText(value?: string) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, 90) || "Sem mensagem recente";
 }
 
-function previewText(value?: string) {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 88) || "Sem prévia";
-}
-
-function statusLabel(value: string) {
-  return value.replaceAll("_", " ");
+function Metric({
+  title,
+  value,
+  hint,
+  icon: Icon,
+}: {
+  title: string;
+  value: string | number;
+  hint: string;
+  icon: typeof MessageCircle;
+}) {
+  return (
+    <article className="nl-metric">
+      <div className="nl-metric-top">
+        <span className="nl-metric-title">{title}</span>
+        <span className="nl-metric-icon"><Icon size={16} /></span>
+      </div>
+      <strong>{value}</strong>
+      <small>{hint}</small>
+    </article>
+  );
 }
 
 export default async function DashboardPage() {
-  const { contacts, deals, messages, activities, stages, serviceOrders, serviceOrdersReady, isDemo } = await getCrmData();
+  const { contacts, deals, messages, activities, stages, serviceOrders, serviceOrdersReady, isDemo, error } = await getCrmData();
   const now = new Date();
-  const today = startOfDay(now);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const stageById = new Map(stages.map((stage) => [stage.id, stage]));
   const contactById = new Map(contacts.map((contact) => [contact.id, contact]));
-  const openDeals = deals.filter((deal) => deal.status === "aberto");
-  const totalPipeline = openDeals.reduce((sum, deal) => sum + deal.value, 0);
-  const proposalDeals = openDeals.filter((deal) => stageById.get(deal.stageId)?.title.toLowerCase().includes("proposta"));
-  const hotLeads = contacts.filter((contact) => contact.temperature === "quente").length;
-  const openServiceOrders = serviceOrders.filter((order) => !["concluida", "entregue", "cancelada"].includes(order.status));
-  const lateServiceOrders = openServiceOrders.filter((order) => order.dueAt && new Date(order.dueAt).getTime() < now.getTime()).length;
+  const stageById = new Map(stages.map((stage) => [stage.id, stage]));
 
-  const pendingActivityMap = new Map<string, typeof activities[number]>();
-  activities
+  const openDeals = deals.filter((deal) => deal.status === "aberto");
+  const pipelineValue = openDeals.reduce((total, deal) => total + deal.value, 0);
+  const proposals = openDeals.filter((deal) => /proposta|orçamento/i.test(stageById.get(deal.stageId)?.title || ""));
+  const pending = activities
     .filter((activity) => !activity.done)
-    .forEach((activity) => {
-      const key = activityKey(activity);
-      if (!pendingActivityMap.has(key)) pendingActivityMap.set(key, activity);
-    });
-  const pendingActivities = Array.from(pendingActivityMap.values()).sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
-  const overdueActivities = pendingActivities.filter((activity) => new Date(activity.dueAt).getTime() < now.getTime()).length;
-  const todayActivities = pendingActivities.filter((activity) => {
-    const due = new Date(activity.dueAt);
-    return due >= today && due < tomorrow;
-  }).length;
+    .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+  const overdue = pending.filter((activity) => new Date(activity.dueAt).getTime() < now.getTime()).length;
+  const dueToday = pending.filter((activity) => isSameDay(activity.dueAt, now)).length;
+  const openOrders = serviceOrders.filter((order) => !["concluida", "entregue", "cancelada"].includes(order.status));
 
   const messagesByContact = new Map<string, typeof messages>();
-  messages.forEach((message) => {
-    const current = messagesByContact.get(message.contactId) || [];
-    current.push(message);
-    messagesByContact.set(message.contactId, current);
-  });
+  for (const message of messages) {
+    const list = messagesByContact.get(message.contactId) || [];
+    list.push(message);
+    messagesByContact.set(message.contactId, list);
+  }
 
-  const leadsWaitingReply = contacts
+  const unanswered = contacts
     .map((contact) => {
-      const thread = (messagesByContact.get(contact.id) || []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      const last = thread.at(-1);
+      const last = (messagesByContact.get(contact.id) || [])
+        .slice()
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
       return { contact, last };
     })
-    .filter((item) => item.last?.direction === "inbound" && item.last.status !== "read")
+    .filter(({ last }) => last?.direction === "inbound" && last.status !== "read")
     .sort((a, b) => new Date(b.last?.createdAt || 0).getTime() - new Date(a.last?.createdAt || 0).getTime());
 
-  const recentConversations = contacts
+  const workQueue = [
+    ...unanswered.slice(0, 4).map(({ contact, last }) => ({
+      id: "message-" + contact.id,
+      title: contact.name,
+      detail: safeText(last?.body),
+      kind: "Responder",
+      href: "/inbox?contact=" + encodeURIComponent(contact.id),
+      meta: last ? shortDate(last.createdAt) : "",
+      urgent: true,
+    })),
+    ...pending.slice(0, 5).map((activity) => ({
+      id: "activity-" + activity.id,
+      title: activity.title,
+      detail: contactById.get(activity.contactId)?.name || "Contato",
+      kind: "Atividade",
+      href: "/inbox?contact=" + encodeURIComponent(activity.contactId),
+      meta: shortDate(activity.dueAt),
+      urgent: new Date(activity.dueAt).getTime() < now.getTime(),
+    })),
+  ].sort((a, b) => Number(b.urgent) - Number(a.urgent)).slice(0, 7);
+
+  const recentContacts = contacts
     .slice()
     .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
     .slice(0, 5);
 
-  const salesQueue = [
-    ...leadsWaitingReply.slice(0, 4).map(({ contact, last }) => ({
-      id: `reply-${contact.id}`,
-      label: "Responder",
-      title: contact.name,
-      detail: previewText(last?.body),
-      href: `/inbox?contact=${contact.id}`,
-      tone: "urgent",
-      meta: last ? shortDate(last.createdAt) : "",
-    })),
-    ...pendingActivities.slice(0, 4).map((activity) => {
-      const contact = contactById.get(activity.contactId);
-      return {
-        id: `activity-${activity.id}`,
-        label: "Follow-up",
-        title: contact?.name || "Lead",
-        detail: activity.title,
-        href: `/inbox?contact=${activity.contactId}`,
-        tone: new Date(activity.dueAt).getTime() < now.getTime() ? "late" : "normal",
-        meta: shortDate(activity.dueAt),
-      };
-    }),
-  ].slice(0, 6);
-
-  const proposalsValue = proposalDeals.reduce((sum, deal) => sum + deal.value, 0);
-
   return (
-    <>
-      <section className="dash-command card">
+    <div className="nl-dashboard">
+      <header className="nl-page-heading">
         <div>
-          <p className="eyebrow">Visão geral</p>
-          <h1>Bom dia, Anthony.</h1>
-          <p className="description">Veja o que precisa de atenção agora: conversas, follow-ups, propostas e serviços.</p>
+          <span className="nl-page-kicker">Visão geral</span>
+          <h1>Seu dia em um só lugar</h1>
+          <p>Acompanhe conversas, oportunidades e o que precisa da sua atenção.</p>
         </div>
-        <div className="dash-command-actions">
-          <span className={`system-status ${isDemo ? "demo" : "online"}`}>{isDemo ? "Modo demo" : "Supabase conectado"}</span>
-          <Link className="btn" href="/inbox">Atendimentos</Link>
-          <Link className="btn secondary" href="/funil">Funil</Link>
-          <Link className="btn secondary" href="/ordens">Serviços</Link>
+        <div className="nl-page-actions">
+          <Link className="nl-action" href="/funil"><KanbanSquare size={17} /> Ver funil</Link>
+          <Link className="nl-action nl-action-primary" href="/inbox"><MessageCircle size={17} /> Abrir atendimentos</Link>
         </div>
+      </header>
+
+      {(isDemo || error) && (
+        <div className="nl-demo-alert" role="status">
+          <span aria-hidden="true">!</span>
+          {isDemo
+            ? "Você está visualizando dados de demonstração. Eles não representam vendas ou clientes reais."
+            : "Não foi possível carregar todos os dados. Confira a conexão com o banco antes de utilizar o CRM."}
+        </div>
+      )}
+
+      <section className="nl-metrics" aria-label="Resumo dos indicadores">
+        <Metric title="Aguardando resposta" value={unanswered.length} hint="Conversas que pedem retorno" icon={MessageCircle} />
+        <Metric title="Tarefas pendentes" value={pending.length} hint={dueToday + " para hoje · " + overdue + " atrasadas"} icon={CalendarClock} />
+        <Metric title="Negócios abertos" value={openDeals.length} hint="Oportunidades em andamento" icon={KanbanSquare} />
+        <Metric title="Valor em negociação" value={money(pipelineValue)} hint="Soma dos negócios em aberto" icon={FileText} />
       </section>
 
-      <section className="dash-kpi-strip">
-        <article className="dash-kpi primary">
-          <span>Pipeline aberto</span>
-          <strong>{money(totalPipeline)}</strong>
-          <small>{openDeals.length} oportunidade(s)</small>
-        </article>
-        <article className="dash-kpi">
-          <span>Sem resposta</span>
-          <strong>{leadsWaitingReply.length}</strong>
-          <small>cliente falou por último</small>
-        </article>
-        <article className="dash-kpi">
-          <span>Follow-ups</span>
-          <strong>{pendingActivities.length}</strong>
-          <small>{todayActivities} hoje · {overdueActivities} atrasado(s)</small>
-        </article>
-        <article className="dash-kpi">
-          <span>Propostas</span>
-          <strong>{proposalDeals.length}</strong>
-          <small>{money(proposalsValue)}</small>
-        </article>
-        <article className="dash-kpi">
-          <span>OS abertas</span>
-          <strong>{openServiceOrders.length}</strong>
-          <small>{serviceOrdersReady ? `${lateServiceOrders} atrasada(s)` : "ativar tabela"}</small>
-        </article>
-      </section>
-
-      <section className="dash-board-clean">
-        <article className="dash-main-card card">
-          <div className="dash-section-head">
+      <div className="nl-dashboard-grid">
+        <section className="nl-panel">
+          <header className="nl-panel-head">
             <div>
-              <p className="eyebrow-small">Fila de trabalho</p>
-              <h2>O que fazer agora</h2>
-              <p className="muted">Ordem sugerida para o atendimento comercial de hoje.</p>
+              <h2>Prioridades de hoje</h2>
+              <p>Respostas e atividades para não perder oportunidades.</p>
             </div>
-            <Link className="btn mini secondary" href="/inbox">Abrir atendimentos</Link>
+            <Link href="/agenda" className="nl-inline-link">Agenda <ArrowRight size={14} /></Link>
+          </header>
+          <div className="nl-list">
+            {workQueue.length === 0 ? (
+              <p className="nl-empty">Tudo em dia por aqui. Novas mensagens e tarefas aparecerão nesta lista.</p>
+            ) : workQueue.map((item) => (
+              <Link className="nl-list-row" href={item.href} key={item.id}>
+                <span className={`nl-list-avatar ${item.urgent ? "urgent" : ""}`} aria-hidden="true">
+                  {item.title.slice(0, 1).toUpperCase()}
+                </span>
+                <span className="nl-list-content">
+                  <strong><span className="nl-list-tag">{item.kind}</span>{item.title}</strong>
+                  <small>{item.detail}</small>
+                </span>
+                <span className="nl-list-meta">{item.meta}</span>
+              </Link>
+            ))}
           </div>
+        </section>
 
-          <div className="dash-task-list">
-            {salesQueue.length === 0 ? (
-              <div className="dash-empty">Nenhuma ação urgente agora.</div>
-            ) : (
-              salesQueue.map((item) => (
-                <Link key={item.id} className={`dash-task-row ${item.tone}`} href={item.href}>
-                  <span className="dash-task-label">{item.label}</span>
-                  <span className="dash-task-copy">
-                    <strong>{item.title}</strong>
-                    <small>{item.detail}</small>
-                  </span>
-                  <em>{item.meta}</em>
+        <div className="nl-panel-stack">
+          <section className="nl-panel">
+            <header className="nl-panel-head">
+              <div><h2>Resumo comercial</h2><p>Negócios e serviços em andamento.</p></div>
+              <Link className="nl-inline-link" href="/funil">Ver tudo <ArrowRight size={14} /></Link>
+            </header>
+            <div className="nl-mini-stat"><strong>Propostas abertas</strong><em>{proposals.length}</em></div>
+            <div className="nl-mini-stat"><span>Valor das propostas</span><em>{money(proposals.reduce((sum, deal) => sum + deal.value, 0))}</em></div>
+            <div className="nl-mini-stat"><strong>Ordens de serviço</strong><em>{serviceOrdersReady ? openOrders.length : "—"}</em></div>
+            <div className="nl-mini-stat"><span>Contatos cadastrados</span><em>{contacts.length}</em></div>
+            {!serviceOrdersReady && <p className="nl-panel-note">O módulo de serviços ainda precisa ser configurado no banco.</p>}
+          </section>
+
+          <section className="nl-panel">
+            <header className="nl-panel-head">
+              <div><h2>Conversas recentes</h2><p>Retome o contato de onde parou.</p></div>
+              <Link href="/inbox" className="nl-inline-link">Inbox <ArrowRight size={14} /></Link>
+            </header>
+            <div className="nl-list">
+              {recentContacts.length === 0 ? (
+                <p className="nl-empty">Seus contatos aparecerão aqui quando começarem a conversar.</p>
+              ) : recentContacts.map((contact) => (
+                <Link key={contact.id} className="nl-list-row" href={"/inbox?contact=" + encodeURIComponent(contact.id)}>
+                  <span className="nl-list-avatar" aria-hidden="true">{contact.name.slice(0, 1).toUpperCase()}</span>
+                  <span className="nl-list-content"><strong>{contact.name}</strong><small>{contact.company || contact.source}</small></span>
+                  <ArrowRight size={15} />
                 </Link>
-              ))
-            )}
-          </div>
-        </article>
-
-        <aside className="dash-side-column">
-          <article className="dash-small-card card">
-            <div className="dash-section-head compact">
-              <div>
-                <p className="eyebrow-small">Pipeline</p>
-                <h2>Propostas abertas</h2>
-              </div>
-              <Link className="btn mini secondary" href="/funil">Ver</Link>
+              ))}
             </div>
-            <div className="dash-mini-list">
-              {proposalDeals.length === 0 ? (
-                <div className="dash-empty mini">Nenhuma proposta aberta.</div>
-              ) : proposalDeals.slice(0, 4).map((deal) => {
-                const contact = contactById.get(deal.contactId);
-                return (
-                  <Link key={deal.id} className="dash-mini-row" href={`/inbox?contact=${deal.contactId}`}>
-                    <span>
-                      <strong>{deal.title}</strong>
-                      <small>{contact?.name || "Lead"} · {stageById.get(deal.stageId)?.title || "Funil"}</small>
-                    </span>
-                    <em>{money(deal.value)}</em>
-                  </Link>
-                );
-              })}
-            </div>
-          </article>
-
-          <article className="dash-small-card card">
-            <div className="dash-section-head compact">
-              <div>
-                <p className="eyebrow-small">Operação</p>
-                <h2>Ordens abertas</h2>
-              </div>
-              <Link className="btn mini secondary" href="/ordens">Serviços</Link>
-            </div>
-            <div className="dash-mini-list">
-              {!serviceOrdersReady ? (
-                <div className="dash-empty mini">Rode a migration de OS.</div>
-              ) : openServiceOrders.length === 0 ? (
-                <div className="dash-empty mini">Nenhuma OS aberta.</div>
-              ) : openServiceOrders.slice(0, 4).map((order) => {
-                const contact = contactById.get(order.contactId);
-                return (
-                  <Link key={order.id} className="dash-mini-row" href="/ordens">
-                    <span>
-                      <strong>{order.title}</strong>
-                      <small>{contact?.name || "Contato"} · {statusLabel(order.status)}</small>
-                    </span>
-                    <em>{order.dueAt ? shortDate(order.dueAt) : money(order.estimatedValue)}</em>
-                  </Link>
-                );
-              })}
-            </div>
-          </article>
-        </aside>
-      </section>
-
-      <section className="dash-recent card">
-        <div className="dash-section-head compact">
-          <div>
-            <p className="eyebrow-small">Movimento</p>
-            <h2>Conversas recentes</h2>
-          </div>
-          <span className="badge warm">{hotLeads} quente(s)</span>
+          </section>
         </div>
-        <div className="dash-recent-grid">
-          {recentConversations.map((contact) => (
-            <Link key={contact.id} className="dash-mini-row" href={`/inbox?contact=${contact.id}`}>
-              <span>
-                <strong>{contact.name}</strong>
-                <small>{contact.company || contact.source}</small>
-              </span>
-              <em>{shortDate(contact.lastMessageAt)}</em>
-            </Link>
-          ))}
-        </div>
-      </section>
-    </>
+      </div>
+    </div>
   );
 }
