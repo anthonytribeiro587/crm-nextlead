@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./refresh.css";
 import { Shell } from "@/components/Shell";
 import { getCurrentUser } from "@/lib/auth-server";
 import { getTenantContext } from "@/lib/tenant";
 
 export const metadata: Metadata = {
-  title: "NextLead CRM WhatsApp",
-  description: "CRM próprio com WhatsApp Cloud API, funil comercial e inbox.",
+  title: "NextLead | CRM",
+  description: "Organize conversas, contatos, oportunidades e tarefas em um só lugar.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
