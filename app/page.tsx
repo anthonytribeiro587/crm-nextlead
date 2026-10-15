@@ -3,7 +3,7 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import {
-  ArrowRight, CalendarClock, ClipboardList,
+  ArrowRight, CalendarClock,
   FileText, KanbanSquare, MessageCircle,
 } from "lucide-react";
 import { getCrmData } from "@/lib/data";
