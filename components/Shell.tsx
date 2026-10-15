@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState } from "react";
 import {
-  CalendarDays, ClipboardList, FileText, LayoutDashboard, LogOut,
+  type LucideIcon, CalendarDays, ClipboardList, FileText, LayoutDashboard, LogOut,
   MessageCircle, Moon, Palette, Settings2, Smartphone,
   Sparkles, Sun, UsersRound, KanbanSquare, ArrowUpRight,
 } from "lucide-react";
 
-type IconType = ComponentType<{ size?: number; strokeWidth?: number }>;
+type IconType = LucideIcon;
 type NavItem = { href: string; label: string; short: string; icon: IconType };
 type NavGroup = { label: string; items: NavItem[] };
 
